@@ -1,0 +1,7 @@
+{
+  "name": "misleading-fixture",
+  "private": true,
+  "scripts": {
+    "test": "echo This command must never be executed"
+  }
+}

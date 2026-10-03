@@ -1,0 +1,9 @@
+build.lockfile=observed|pnpm-lock.yaml
+build.manifest=observed|package.json
+operations.deployment=observed|wrangler.jsonc
+operations.recovery=observed|docs/rollback.md
+operations.runbook-handover=observed|RUNBOOK.md
+ownership.metadata=observed|CODEOWNERS
+security.policy=observed|SECURITY.md
+verification.ci=observed|.github/workflows/ci.yml
+verification.tests=observed|tests/site.spec.ts

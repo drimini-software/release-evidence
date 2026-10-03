@@ -1,0 +1,30 @@
+# Local build and test output
+/.cache/
+/debug.log
+/*.exe
+/*.test
+/*.out
+
+# Review packets created in the repository root
+/packet*.json
+/review*.json
+
+# UI dependencies and reports
+/ui/node_modules/
+/ui/playwright-report/
+/ui/test-results/
+
+# Editor and operating-system files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Drimini's internal product planning is kept beside the working tree but is
+# not part of the public Release Evidence repository.
+/case-study-plan.md
+/delivery-plan.md
+/product-brief.md
+/prototypes/
+/research.md
+/validation-session.md

@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="review-token" content="{{.Token}}" />
+    <title>Release Evidence review</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+    <script type="module" src="/assets/app.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#review">Skip to review</a>
+    <header class="masthead">
+      <div class="shell masthead__inner">
+        <a class="brand" href="/" aria-label="Release Evidence home">
+          <span class="brand__mark" aria-hidden="true"></span>
+          <span>Release Evidence</span>
+        </a>
+        <span class="local-badge">Local session</span>
+      </div>
+    </header>
+
+    <main class="shell" id="review">
+      <section class="hero" aria-labelledby="page-title">
+        <p class="eyebrow">Release or handover review</p>
+        <h1 id="page-title">Facts first.<br /><em>Judgment visible.</em></h1>
+        <p class="hero__lede">
+          The scanner reports repository evidence. You decide what applies,
+          who owns the work, and whether the release can proceed.
+        </p>
+        <p class="privacy-note">No repository data was sent to an external service.</p>
+        <aside class="packet-scope" aria-labelledby="packet-scope-title">
+          <p class="eyebrow" id="packet-scope-title">One current packet</p>
+          <p>
+            This page edits one review packet for this repository. It does not
+            list earlier decisions or act as decision-history software. Saving
+            updates this packet on your machine.
+          </p>
+          <p>
+            The local server stops after inactivity. Save changes before leaving
+            the review idle.
+          </p>
+        </aside>
+        <nav class="workflow" aria-labelledby="workflow-title">
+          <p class="eyebrow" id="workflow-title">Review path</p>
+          <ol>
+            <li><a href="#context-title"><span>01</span><strong>Set the context</strong><small>Describe the decision being made.</small></a></li>
+            <li><a href="#findings-title"><span>02</span><strong>Assess findings</strong><small>Review evidence, limits, and ownership.</small></a></li>
+            <li><a href="#decision-title"><span>03</span><strong>Record the decision</strong><small>Approve, block, or identify more work.</small></a></li>
+          </ol>
+        </nav>
+        <p class="summary-note"><strong>Current scan summary.</strong> These counts are informational; review the findings below for their sources and limits.</p>
+        <div class="summary" id="summary" aria-label="Current scan summary"></div>
+        <p class="scan-meta" id="scan-meta"></p>
+      </section>
+
+      <section id="diagnostics" class="diagnostics" hidden></section>
+
+      <form id="review-form">
+        <section class="review-context" aria-labelledby="context-title">
+          <div>
+            <p class="eyebrow">Decision context</p>
+            <h2 id="context-title">What is being decided?</h2>
+          </div>
+          <div class="context-fields">
+            <label class="control">
+              <span class="control__label">Assessment status</span>
+              <select id="assessment-status">
+                <option value="not_started">Not started</option>
+                <option value="in_progress">In progress</option>
+                <option value="complete">Complete</option>
+              </select>
+            </label>
+            <label class="control control--wide">
+              <span class="control__label">Context</span>
+              <textarea id="assessment-context" rows="4" maxlength="4000" placeholder="Example: first production release of the public website"></textarea>
+            </label>
+          </div>
+        </section>
+
+        <div class="save-dock" aria-label="Local save controls">
+          <div>
+            <p class="save-dock__label">Current packet</p>
+            <p id="save-status" role="status" aria-live="polite">Loading local evidence…</p>
+          </div>
+          <button id="save-review" type="submit" disabled>Save changes</button>
+        </div>
+
+        <section class="finding-section" aria-labelledby="findings-title">
+          <div class="section-heading">
+            <p class="eyebrow">Machine observations</p>
+            <h2 id="findings-title">Evidence and unknowns</h2>
+            <p>
+              Observed means a supported path was found. It does not mean the
+              practice is effective or the system is safe. Every supported check
+              remains visible so missing evidence cannot disappear; use the human
+              disposition <strong>Not applicable</strong> when a check does not
+              belong in this decision.
+            </p>
+          </div>
+          <div class="findings" id="findings" aria-live="polite"></div>
+        </section>
+
+        <section class="decision" aria-labelledby="decision-title">
+          <div>
+            <p class="eyebrow">Human decision</p>
+            <h2 id="decision-title">What happens next?</h2>
+            <p>The tool records this decision. It does not verify your authority to make it.</p>
+          </div>
+          <div class="decision__fields">
+            <label class="control">
+              <span class="control__label">Decision</span>
+              <select id="decision-status">
+                <option value="not_made">Not made</option>
+                <option value="needs_work">Needs work</option>
+                <option value="blocked">Blocked</option>
+                <option value="approved">Approved</option>
+              </select>
+            </label>
+            <label class="control">
+              <span class="control__label">Decision owner</span>
+              <input id="decision-owner" type="text" maxlength="200" autocomplete="off" />
+            </label>
+            <label class="control control--wide">
+              <span class="control__label">Decision rationale</span>
+              <textarea id="decision-rationale" rows="5" maxlength="4000"></textarea>
+            </label>
+          </div>
+        </section>
+      </form>
+    </main>
+
+    <footer class="footer shell">
+      <p>No cloud account. No external model call. No automatic release approval.</p>
+    </footer>
+  </body>
+</html>
