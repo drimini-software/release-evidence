@@ -1,5 +1,7 @@
 # Release Evidence
 
+[![CI](https://github.com/drimini-software/release-evidence/actions/workflows/ci.yml/badge.svg)](https://github.com/drimini-software/release-evidence/actions/workflows/ci.yml)
+
 > Experimental preview. The workflow is working, but its usefulness has not
 > yet been validated with independent target users.
 
