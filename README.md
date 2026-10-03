@@ -90,8 +90,8 @@ Contributions are welcome within the project's narrow safety boundary. Read
 
 ## Project status
 
-This repository is being published to make the experiment inspectable and to
-find people for whom the workflow is genuinely useful. It has no stable release,
+This repository is public to make the experiment inspectable and to find people
+for whom the workflow is genuinely useful. It has no stable release,
 supported binary, service-level commitment, certification claim, or commercial
 availability. The name is provisional.
 
