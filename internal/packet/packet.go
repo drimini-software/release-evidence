@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 
 	"github.com/drimini-software/release-evidence/internal/model"
+	"github.com/drimini-software/release-evidence/internal/output"
 )
 
 type digestContent struct {
@@ -109,64 +109,7 @@ func Encode(w io.Writer, p model.Packet, pretty bool) error {
 // WriteAtomic writes a packet without replacing the last valid file until the
 // new content has been encoded and flushed successfully.
 func WriteAtomic(destination string, p model.Packet, pretty bool) error {
-	destination, err := filepath.Abs(destination)
-	if err != nil {
-		return fmt.Errorf("resolve output path: %w", err)
-	}
-
-	directory := filepath.Dir(destination)
-	if err := os.MkdirAll(directory, 0o755); err != nil {
-		return fmt.Errorf("create output directory: %w", err)
-	}
-
-	temporary, err := os.CreateTemp(directory, ".release-evidence-packet-*")
-	if err != nil {
-		return fmt.Errorf("create temporary output: %w", err)
-	}
-	temporaryPath := temporary.Name()
-	defer os.Remove(temporaryPath)
-
-	if err := Encode(temporary, p, pretty); err != nil {
-		temporary.Close()
-		return err
-	}
-	if err := temporary.Sync(); err != nil {
-		temporary.Close()
-		return fmt.Errorf("flush temporary output: %w", err)
-	}
-	if err := temporary.Close(); err != nil {
-		return fmt.Errorf("close temporary output: %w", err)
-	}
-
-	backupPath := ""
-	if _, err := os.Stat(destination); err == nil {
-		backup, createErr := os.CreateTemp(directory, ".release-evidence-previous-*")
-		if createErr != nil {
-			return fmt.Errorf("reserve previous-output path: %w", createErr)
-		}
-		backupPath = backup.Name()
-		if closeErr := backup.Close(); closeErr != nil {
-			return fmt.Errorf("close previous-output placeholder: %w", closeErr)
-		}
-		if removeErr := os.Remove(backupPath); removeErr != nil {
-			return fmt.Errorf("prepare previous-output path: %w", removeErr)
-		}
-		if renameErr := os.Rename(destination, backupPath); renameErr != nil {
-			return fmt.Errorf("preserve previous output: %w", renameErr)
-		}
-	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("inspect output path: %w", err)
-	}
-
-	if err := os.Rename(temporaryPath, destination); err != nil {
-		if backupPath != "" {
-			_ = os.Rename(backupPath, destination)
-		}
-		return fmt.Errorf("replace output: %w", err)
-	}
-
-	if backupPath != "" {
-		_ = os.Remove(backupPath)
-	}
-	return nil
+	return output.WriteAtomic(destination, func(writer io.Writer) error {
+		return Encode(writer, p, pretty)
+	})
 }

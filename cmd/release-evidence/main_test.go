@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/drimini-software/release-evidence/internal/model"
+	"github.com/drimini-software/release-evidence/internal/packet"
 )
 
 func TestRunScanWritesPacketToStandardOutput(t *testing.T) {
@@ -27,6 +30,111 @@ func TestRunScanWritesPacketToStandardOutput(t *testing.T) {
 	}
 	if packet.SchemaVersion != model.SchemaVersion || len(packet.Findings) == 0 {
 		t.Fatal("scan output is missing schema or findings")
+	}
+}
+
+func scanPacket(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "packet.json")
+	var stdout, stderr bytes.Buffer
+	if code := run(context.Background(), []string{"scan", "--output", path, filepath.Join("..", "..", "fixtures", "session")}, &stdout, &stderr); code != 0 {
+		t.Fatalf("scan exit %d: %s", code, stderr.String())
+	}
+	return path
+}
+
+func TestExportWorksFromSavedPacketWithoutRepository(t *testing.T) {
+	input := scanPacket(t)
+	for _, format := range []string{"html", "markdown"} {
+		var stdout, stderr bytes.Buffer
+		code := run(context.Background(), []string{"export", "--format", format, input}, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("export exit %d: %s", code, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "Decision record") || !strings.Contains(stdout.String(), "Scan boundary and provenance") {
+			t.Fatal("export is missing report sections")
+		}
+		if strings.Contains(stdout.String(), filepath.Dir(input)) {
+			t.Fatal("input packet absolute path leaked into report")
+		}
+	}
+}
+
+func TestExportCannotOverwriteInputOrDestroyPreviousReportOnInvalidPacket(t *testing.T) {
+	input := scanPacket(t)
+	previousInput, err := os.ReadFile(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run(context.Background(), []string{"export", "--output", input, input}, &stdout, &stderr); code != 1 {
+		t.Fatalf("input overwrite exit = %d", code)
+	}
+	after, err := os.ReadFile(input)
+	if err != nil || !bytes.Equal(previousInput, after) {
+		t.Fatal("input was changed")
+	}
+	destination := filepath.Join(t.TempDir(), "report.html")
+	if err := os.WriteFile(destination, []byte("previous report"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(input, []byte(`{"schema_version":"999"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if code := run(context.Background(), []string{"export", "--output", destination, input}, &stdout, &stderr); code != 1 {
+		t.Fatalf("invalid packet exit = %d", code)
+	}
+	after, err = os.ReadFile(destination)
+	if err != nil || string(after) != "previous report" {
+		t.Fatal("invalid packet destroyed previous report")
+	}
+}
+
+func TestCompareJSONAndBothReportFormats(t *testing.T) {
+	input := scanPacket(t)
+	current, err := packet.Load(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current.Decision.Status = "needs_work"
+	current.Decision.Rationale = "An independently unvalidated test decision"
+	after := filepath.Join(t.TempDir(), "current.json")
+	if err := packet.WriteAtomic(after, current, true); err != nil {
+		t.Fatal(err)
+	}
+	for _, format := range []string{"html", "markdown", "json"} {
+		var stdout, stderr bytes.Buffer
+		if code := run(context.Background(), []string{"compare", "--format", format, input, after}, &stdout, &stderr); code != 0 {
+			t.Fatalf("compare %s exit %d: %s", format, code, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), current.Decision.Rationale) {
+			t.Fatal("comparison lost current human decision")
+		}
+		if format == "json" {
+			var result struct {
+				DecisionChanged bool              `json:"decision_changed"`
+				Changes         []json.RawMessage `json:"changes"`
+				Unchanged       int               `json:"unchanged"`
+			}
+			if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+				t.Fatal(err)
+			}
+			if !result.DecisionChanged || len(result.Changes) != 0 || result.Unchanged != len(current.Findings) {
+				t.Fatal("human decision was counted as an evidence change")
+			}
+		}
+	}
+}
+
+func TestReportCommandsRejectInvalidOptions(t *testing.T) {
+	for _, args := range [][]string{
+		{"export"}, {"compare", "one.json"}, {"export", "--format", "json", "packet.json"},
+		{"compare", "--format", "pdf", "one.json", "two.json"}, {"export", "--output=", "packet.json"},
+	} {
+		var stdout, stderr bytes.Buffer
+		if code := run(context.Background(), args, &stdout, &stderr); code != 2 {
+			t.Fatalf("%v exit %d: %s", args, code, stderr.String())
+		}
 	}
 }
 

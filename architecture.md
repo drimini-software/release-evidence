@@ -1,7 +1,7 @@
 # Release Evidence architecture
 
-Status: Implemented direction for scanner and local review slices
-Last reviewed: 2026-09-27
+Status: Implemented scanner, local review, and command-line export/comparison
+Last reviewed: 2026-10-11
 
 ## Architectural goal
 
@@ -98,6 +98,19 @@ assessment separately from scanner output.
 Produces a self-contained inert HTML report and a Markdown summary from an
 existing packet. Export never needs repository access.
 
+### `release-evidence compare <previous-packet> <current-packet>`
+
+Compares two validated saved packets by stable rule ID. HTML and Markdown include
+the current complete report and the previous observations for changed rules;
+JSON exposes a versioned comparison document. Human assessments and decisions
+are compared separately. Observation timestamps and collection order are
+ignored when classifying changes. File contents are not compared.
+
+Warnings retain uncertainty when boundaries, detector versions, diagnostics,
+repository labels, completeness, or revision/working-tree knowledge differ.
+Repository labels do not authenticate identity; the operator must confirm the
+selected pair. Comparison opens no repository files and makes no network calls.
+
 Additional commands require evidence. Do not add daemon, account, cloud, or
 organization modes in the first slice.
 
@@ -107,7 +120,7 @@ organization modes in the first slice.
 
 - validates explicit paths and options;
 - establishes cancellation and resource budgets;
-- chooses scan, review, or export mode;
+- chooses scan, review, export, or saved-packet comparison mode;
 - communicates failures without stack traces or sensitive values by default.
 
 It contains no detector logic.
@@ -216,6 +229,21 @@ Transforms only validated packet data into report formats. It:
 - lists exclusions, incomplete scans, limitations, and unresolved unknowns;
 - distinguishes observed facts from manual assertions;
 - never emits an overall certification or security score.
+
+The current exporter uses Go's `html/template` for automatic HTML escaping and
+static embedded templates with no scripts or external assets. Markdown puts
+every untrusted value in a code span with a delimiter longer than any backtick
+run in the value; line breaks become visible markers to prevent new blocks.
+Both formats retain scan and assessment timestamps without adding an export
+timestamp, so the same saved inputs produce the same report.
+
+All packet and report writes use the shared `internal/output` helper. It renders
+to a private temporary file, flushes and closes it, preserves the previous
+output while replacing it, and rejects non-regular output paths. Report commands
+also reject input/output aliases, including hard links. Free-text notes are
+preserved; the exporter does not redact information a person chose to enter.
+Opening the local export for review before sharing is the current disclosure
+workflow; no external transfer or automatic publication occurs.
 
 ## Evidence state semantics
 

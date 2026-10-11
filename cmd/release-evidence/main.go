@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -9,7 +10,11 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/drimini-software/release-evidence/internal/comparison"
+	"github.com/drimini-software/release-evidence/internal/model"
+	"github.com/drimini-software/release-evidence/internal/output"
 	"github.com/drimini-software/release-evidence/internal/packet"
+	"github.com/drimini-software/release-evidence/internal/report"
 	"github.com/drimini-software/release-evidence/internal/repository"
 	"github.com/drimini-software/release-evidence/internal/review"
 	"github.com/drimini-software/release-evidence/internal/scanner"
@@ -37,6 +42,10 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return runScan(ctx, args[1:], stdout, stderr)
 	case "review":
 		return runReview(ctx, args[1:], stdout, stderr)
+	case "export":
+		return runReport(ctx, args[1:], false, stdout, stderr)
+	case "compare":
+		return runReport(ctx, args[1:], true, stdout, stderr)
 	case "help", "--help", "-help", "-h":
 		printUsage(stdout)
 		return 0
@@ -45,6 +54,87 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		printUsage(stderr)
 		return 2
 	}
+}
+
+func runReport(ctx context.Context, args []string, compare bool, stdout, stderr io.Writer) int {
+	command, count := "export", 1
+	formats := "html or markdown"
+	if compare {
+		command, count, formats = "compare", 2, "html, markdown, or json"
+	}
+	flags := flag.NewFlagSet(command, flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	destination := flags.String("output", "-", "write the report to this file, or - for standard output")
+	format := flags.String("format", "html", "report format: "+formats)
+	if err := flags.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return 0
+		}
+		return 2
+	}
+	if flags.NArg() != count {
+		if compare {
+			fmt.Fprintln(stderr, "compare requires a previous packet and a current packet, in that order")
+		} else {
+			fmt.Fprintln(stderr, "export requires exactly one packet path")
+		}
+		return 2
+	}
+	if *format != "html" && *format != "markdown" && !(compare && *format == "json") {
+		fmt.Fprintf(stderr, "%s format must be %s\n", command, formats)
+		return 2
+	}
+	if *destination == "" {
+		fmt.Fprintln(stderr, "output path must not be empty")
+		return 2
+	}
+	if err := ctx.Err(); err != nil {
+		fmt.Fprintf(stderr, "%s failed: %v\n", command, err)
+		return 1
+	}
+	var previous *model.Packet
+	if compare {
+		loaded, err := packet.Load(flags.Arg(0))
+		if err != nil {
+			fmt.Fprintf(stderr, "load previous packet: %v\n", err)
+			return 1
+		}
+		previous = &loaded
+	}
+	current, err := packet.Load(flags.Arg(count - 1))
+	if err != nil {
+		fmt.Fprintf(stderr, "load current packet: %v\n", err)
+		return 1
+	}
+	write := func(writer io.Writer) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if *format == "json" {
+			result, err := comparison.Compare(*previous, current)
+			if err != nil {
+				return err
+			}
+			encoder := json.NewEncoder(writer)
+			encoder.SetIndent("", "  ")
+			return encoder.Encode(result)
+		}
+		return report.Render(writer, current, previous, *format)
+	}
+	if *destination == "-" {
+		err = write(stdout)
+	} else {
+		err = output.WriteAtomic(*destination, write, flags.Args()...)
+	}
+	if err != nil {
+		fmt.Fprintf(stderr, "%s failed: %v\n", command, err)
+		return 1
+	}
+	if *destination != "-" {
+		fmt.Fprintf(stderr, "wrote %s report to %s\n", command, *destination)
+	}
+	fmt.Fprintln(stderr, "Review filenames, owner labels, and free-text notes before sharing the report.")
+	return 0
 }
 
 func runReview(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -158,8 +248,10 @@ func printUsage(writer io.Writer) {
 	fmt.Fprintln(writer, "Usage:")
 	fmt.Fprintln(writer, "  release-evidence scan [options] <repository>")
 	fmt.Fprintln(writer, "  release-evidence review [options] <repository>")
+	fmt.Fprintln(writer, "  release-evidence export [--format html|markdown] [--output path] <packet>")
+	fmt.Fprintln(writer, "  release-evidence compare [--format html|markdown|json] [--output path] <previous-packet> <current-packet>")
 	fmt.Fprintln(writer, "  release-evidence version")
 	fmt.Fprintln(writer)
-	fmt.Fprintln(writer, "Scan makes no network request. Review binds only to a temporary loopback session.")
-	fmt.Fprintln(writer, "Neither command executes repository content.")
+	fmt.Fprintln(writer, "Scan, export, and compare make no network request. Review binds only to a temporary loopback session.")
+	fmt.Fprintln(writer, "Export and compare read saved packets; no command executes repository content.")
 }

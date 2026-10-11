@@ -203,7 +203,9 @@ func validateRelativePath(value string) error {
 	if strings.ContainsRune(value, '\\') {
 		return fmt.Errorf("path is not slash-normalized")
 	}
-	if path.IsAbs(value) || filepath.IsAbs(value) {
+	// Imported packets must reject Windows drive paths even on non-Windows hosts.
+	drivePath := len(value) >= 2 && value[1] == ':' && ((value[0] >= 'A' && value[0] <= 'Z') || (value[0] >= 'a' && value[0] <= 'z'))
+	if path.IsAbs(value) || filepath.IsAbs(value) || drivePath {
 		return fmt.Errorf("path is absolute")
 	}
 	cleaned := path.Clean(value)

@@ -18,6 +18,15 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
+      testMatch: "review.spec.ts",
+      use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      name: "chromium-reports",
+      testMatch: "report.spec.ts",
+      // Complete server-dependent checks before the standalone file reports.
+      // The short idle timeout also cleans up Go's child process on Windows.
+      dependencies: ["chromium"],
       use: { ...devices["Desktop Chrome"] },
     },
   ],

@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>{{.Packet.Repository.Name}} · Release Evidence report</title>
+  <style>
+    :root { color-scheme: light; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #26172d; background: #f6f0e8; }
+    * { box-sizing: border-box; }
+    body { margin: 0; line-height: 1.6; }
+    .shell { width: min(1060px, calc(100% - 2rem)); margin-inline: auto; }
+    header { padding: 3rem 0 2rem; border-bottom: 1px solid #d8ccca; }
+    .eyebrow { color: #6d6171; font-size: .8rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+    h1 { margin: .5rem 0 1rem; font-size: clamp(2.5rem, 7vw, 4.5rem); letter-spacing: -.05em; line-height: 1.1; }
+    h2 { margin: 0 0 1rem; font-size: 1.75rem; letter-spacing: -.03em; line-height: 1.3; }
+    h3 { margin: 0 0 .75rem; font-size: 1.15rem; }
+    p { margin: .5rem 0 1rem; }
+    a { color: #582067; text-underline-offset: .2em; }
+    a:focus-visible { outline: 3px solid #0969da; outline-offset: 4px; }
+    .skip { position: absolute; top: .5rem; left: 1rem; background: #fffaf3; padding: .5rem; transform: translateY(-200%); }
+    .skip:focus { transform: none; }
+    nav { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; margin-top: 1.5rem; }
+    section { padding: 2.5rem 0; border-bottom: 1px solid #d8ccca; }
+    .notice { padding: 1rem 1.25rem; border: 1px solid #9b3e35; border-left-width: .35rem; background: #fff2ef; }
+    .note { color: #6d6171; }
+    .counts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; margin: 1.5rem 0; }
+    .count, article { background: #fffaf3; border: 1px solid #d8ccca; padding: 1.25rem; }
+    .count strong { display: block; font-size: 2rem; line-height: 1.3; }
+    article + article { margin-top: 1rem; }
+    article h3 { overflow-wrap: anywhere; }
+    dl { margin: .75rem 0; }
+    .metadata { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .75rem 2rem; }
+    dt { font-size: .8rem; font-weight: 700; color: #6d6171; }
+    dd { margin: 0 0 .75rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+    ul { padding-left: 1.4rem; }
+    li { margin: .25rem 0; overflow-wrap: anywhere; }
+    code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .9em; overflow-wrap: anywhere; }
+    .value { white-space: pre-wrap; overflow-wrap: anywhere; }
+    .badge { display: inline-block; font-size: .85rem; border: 1px solid #6d6171; padding: .15rem .6rem; border-radius: .25rem; }
+    .human { border-left: 3px solid #582067; padding-left: 1rem; margin-top: 1.5rem; }
+    .pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.5rem; }
+    footer { padding: 2rem 0; color: #6d6171; font-size: .85rem; }
+    @media (max-width: 600px) { .counts { grid-template-columns: repeat(2, minmax(0, 1fr)); } .metadata, .pair { grid-template-columns: minmax(0, 1fr); } article { padding: 1rem; } }
+    @media print { :root { background: white; color: black; } .shell { width: 100%; } nav, .skip { display: none; } article, .count { background: white; } h2, h3 { break-after: avoid; } .human { break-inside: avoid; } section { padding: 1rem 0; } }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#report">Skip to report</a>
+  <header>
+    <div class="shell">
+      <p class="eyebrow">Release Evidence · Experimental · Offline report</p>
+      <h1>{{.Packet.Repository.Name}}</h1>
+      <p>Repository observations and the human decisions recorded alongside them.</p>
+      <p class="note">This report does not certify security, compliance, or release readiness. A recorded approval is a human assertion; the tool does not verify the person's authority.</p>
+      <nav aria-label="Report sections">
+        <a href="#overview">Overview</a>{{if .Comparison}}<a href="#changes">Changes</a>{{end}}<a href="#findings">Evidence</a><a href="#actions">Open review items</a><a href="#boundary">Scan boundary</a>
+      </nav>
+    </div>
+  </header>
+  <main id="report" class="shell">
+    <section id="overview" aria-labelledby="overview-title">
+      <h2 id="overview-title">Decision record</h2>
+      {{if not .Packet.Scan.Complete}}<p class="notice"><strong>Incomplete scan.</strong> Some evidence could not be inspected. Missing results do not establish absence.</p>{{end}}
+      <div class="counts" aria-label="Observation counts">{{range .Counts}}<div class="count"><strong>{{.Total}}</strong>{{.Label}}</div>{{end}}</div>
+      <p class="note">Counts describe recorded observations, not a readiness or security score.</p>
+      <dl>
+        <dt>Human decision</dt><dd>{{label .Packet.Decision.Status}}</dd>
+        <dt>Decision owner</dt><dd>{{if .Packet.Decision.Owner}}{{.Packet.Decision.Owner}}{{else}}Not recorded{{end}}</dd>
+        <dt>Decision rationale</dt><dd>{{if .Packet.Decision.Rationale}}{{.Packet.Decision.Rationale}}{{else}}Not recorded{{end}}</dd>
+        <dt>Decision updated</dt><dd>{{if .Packet.Decision.UpdatedAt}}{{.Packet.Decision.UpdatedAt}}{{else}}Not recorded{{end}}</dd>
+        <dt>Human assessment</dt><dd>{{label .Packet.Assessment.Status}}</dd>
+        <dt>Review context</dt><dd>{{if .Packet.Assessment.Context}}{{.Packet.Assessment.Context}}{{else}}Not recorded{{end}}</dd>
+        <dt>Assessment updated</dt><dd>{{if .Packet.Assessment.UpdatedAt}}{{.Packet.Assessment.UpdatedAt}}{{else}}Not recorded{{end}}</dd>
+      </dl>
+    </section>
+    {{if .Comparison}}
+    <section id="changes" aria-labelledby="changes-title">
+      <h2 id="changes-title">Changes between packets</h2>
+      <p>Rules are matched by their stable identifier. A changed file's contents are not compared; citations record paths and line numbers. Confirm that the selected packets describe the intended repository.</p>
+      {{range .Comparison.Warnings}}<p class="notice">{{.}}</p>{{end}}
+      <p><strong>{{len .Comparison.Changes}}</strong> added, removed, or changed rules; <strong>{{.Comparison.Unchanged}}</strong> unchanged rules.</p>
+      <details><summary>Previous packet metadata</summary><dl class="metadata">{{range .BeforeMetadata}}<div><dt>{{.Label}}</dt><dd>{{.Value}}</dd></div>{{end}}</dl><p>Previous scan complete: {{.Comparison.Before.Scan.Complete}}</p></details>
+      {{range .Comparison.Changes}}
+      <article>
+        <h3>{{.Kind}} · <code>{{.ID}}</code></h3>
+        {{if .Fields}}<p>Changed fields: {{range $index, $field := .Fields}}{{if $index}}, {{end}}{{$field}}{{end}}.</p>{{end}}
+        <div class="pair"><div><h4>Previous observation</h4>{{if .Before}}{{template "machine" .Before}}{{else}}<p>Rule not present in the previous packet.</p>{{end}}</div><div><h4>Current observation</h4>{{if .After}}{{template "machine" .After}}{{else}}<p>Rule not present in the current packet. Removal does not establish that evidence disappeared.</p>{{end}}</div></div>
+      </article>
+      {{else}}<p>No machine-observation changes were recorded.</p>{{end}}
+      <h3>Human assessment changes</h3>
+      {{if .Comparison.ContextChanged}}<div class="pair"><div><h4>Previous review context</h4><p>{{label .Comparison.AssessmentBefore.Status}}</p><p class="value">{{.Comparison.AssessmentBefore.Context}}</p></div><div><h4>Current review context</h4><p>{{label .Comparison.AssessmentAfter.Status}}</p><p class="value">{{.Comparison.AssessmentAfter.Context}}</p></div></div>{{end}}
+      {{range .Comparison.AssessmentChanges}}<article><h4><code>{{.FindingID}}</code></h4><div class="pair"><div><h5>Previous human assessment</h5>{{if .Before}}{{template "assessment" .Before}}{{else}}<p>Not recorded.</p>{{end}}</div><div><h5>Current human assessment</h5>{{if .After}}{{template "assessment" .After}}{{else}}<p>Not recorded.</p>{{end}}</div></div></article>{{else}}<p>No per-finding assessment changes were recorded.</p>{{end}}
+      {{if .Comparison.DecisionChanged}}<h3>Human decision changed</h3><div class="pair"><div><h4>Previous decision</h4>{{template "decision" .Comparison.DecisionBefore}}</div><div><h4>Current decision</h4>{{template "decision" .Comparison.DecisionAfter}}</div></div>{{else}}<p>The recorded human decision is unchanged.</p>{{end}}
+      <h3>Current unknown or not-observed evidence</h3>
+      <p class="note">These are machine observations. A human disposition does not change the scanner's result.</p>
+      <ul>{{range .Comparison.Unresolved}}<li><code>{{.}}</code></li>{{else}}<li>None in the current packet.</li>{{end}}</ul>
+    </section>{{end}}
+    <section id="findings" aria-labelledby="findings-title">
+      <h2 id="findings-title">Recorded evidence</h2>
+      <p>Observed means supported evidence was found. Not observed means the supported search did not find it. Unknown means the tool could not decide. Not applicable is a human judgment. These states do not establish that a practice is effective.</p>
+      {{range .Findings}}<article id="finding-{{.Index}}">
+        <p class="eyebrow">{{.Category}} · <code>{{.ID}}</code></p>
+        <h3>{{.Title}}</h3>
+        {{template "machine" .Finding}}
+        <div class="human"><h4>Human assessment</h4>{{if .HasHuman}}{{template "assessment" .Human}}{{else}}<p>No assessment recorded. This item remains open for human review.</p>{{end}}</div>
+      </article>{{else}}<p>No findings in this packet.</p>{{end}}
+    </section>
+    <section id="actions" aria-labelledby="actions-title">
+      <h2 id="actions-title">Open review items</h2>
+      <p>Items without an assessment, or with an open or assigned disposition, need human follow-up. Accepted, resolved, and not-applicable dispositions record human judgments.</p>
+      <ul>{{range .OpenItems}}<li><a href="#finding-{{.Index}}">{{.Title}}</a>{{if .HasHuman}} — {{label .Human.Disposition}}{{if .Human.Owner}} · {{.Human.Owner}}{{end}}{{if .Human.TargetDate}} · {{.Human.TargetDate}}{{end}}{{if .Human.Rationale}}<p class="value">{{.Human.Rationale}}</p>{{end}}{{else}} — no assessment recorded{{end}}</li>{{else}}<li>No open review items recorded. This does not establish readiness.</li>{{end}}</ul>
+    </section>
+    <section id="boundary" aria-labelledby="boundary-title">
+      <h2 id="boundary-title">Scan boundary and provenance</h2>
+      <dl class="metadata">{{range .Metadata}}<div><dt>{{.Label}}</dt><dd>{{.Value}}</dd></div>{{end}}</dl>
+      <p>Scan complete: <strong>{{.Packet.Scan.Complete}}</strong>.</p>
+      <p class="note">The digest covers normalized evidence, not the human assessment or decision. It is reproducibility metadata, not a signature or attestation. This export reads the saved packet; it does not verify current repository contents.</p>
+      <h3>Active exclusions</h3>
+      <ul>{{range .Packet.Boundary.Exclusions}}<li><code>{{.}}</code></li>{{else}}<li>No exclusions recorded.</li>{{end}}</ul>
+      <h3>Scan diagnostics</h3>
+      <ul>{{range .Packet.Diagnostics}}<li><strong>{{.Severity}} · {{.Code}}</strong>{{if .Path}} · <code>{{.Path}}</code>{{end}}<p class="value">{{.Message}}</p></li>{{else}}<li>No diagnostics recorded.</li>{{end}}</ul>
+    </section>
+  </main>
+  <footer class="shell">Generated locally by Release Evidence. Review filenames, owner labels, and free-text notes before sharing this report. No source excerpts or absolute scan root are added by the exporter; free-text notes may still contain private information.</footer>
+</body>
+</html>
+{{define "machine"}}
+<p class="badge">Scanner observation: {{label .State}}</p>
+<dl><dt>Rule version</dt><dd>{{.RuleVersion}}</dd><dt>Observation confidence (not software safety)</dt><dd>{{.Confidence}}</dd><dt>Explanation</dt><dd>{{.Explanation}}</dd><dt>Detector limitations</dt><dd>{{.Limitations}}</dd></dl>
+<p><strong>Citations</strong></p><ul>{{range .Citations}}<li><code>{{.Path}}{{if .Line}}:{{.Line}}{{end}}</code></li>{{else}}<li>No supported evidence cited.</li>{{end}}</ul>
+<p><strong>Search boundary</strong></p><ul>{{range .SearchBoundary}}<li><code>{{.}}</code></li>{{end}}</ul>
+{{end}}
+{{define "assessment"}}<dl><dt>Human disposition</dt><dd>{{label .Disposition}}</dd><dt>Rationale or next action</dt><dd>{{if .Rationale}}{{.Rationale}}{{else}}Not recorded{{end}}</dd><dt>Owner</dt><dd>{{if .Owner}}{{.Owner}}{{else}}Not recorded{{end}}</dd><dt>Target date</dt><dd>{{if .TargetDate}}{{.TargetDate}}{{else}}Not recorded{{end}}</dd></dl>{{end}}
+{{define "decision"}}<dl><dt>Status</dt><dd>{{label .Status}}</dd><dt>Owner</dt><dd>{{if .Owner}}{{.Owner}}{{else}}Not recorded{{end}}</dd><dt>Rationale</dt><dd>{{if .Rationale}}{{.Rationale}}{{else}}Not recorded{{end}}</dd></dl>{{end}}

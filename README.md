@@ -36,6 +36,51 @@ go run ./cmd/release-evidence review /path/to/repository
 saved atomically outside the scanned repository by default. Pass
 `--state /path/to/packet.json` when you want an explicit location.
 
+## Portable reports and comparisons
+
+Export a saved scan or review packet without access to its repository:
+
+```sh
+go run ./cmd/release-evidence export --output .cache/report.html packet.json
+go run ./cmd/release-evidence export --format markdown --output .cache/report.md packet.json
+```
+
+HTML reports are self-contained, script-free, and printable. Markdown keeps
+repository and review text in code spans so it cannot introduce links, images,
+or active HTML. Both formats include the recorded decision, findings, citations,
+limitations, open review items, exclusions, diagnostics, and evidence provenance.
+Review filenames, owner labels, and free-text notes before sharing an export.
+The exporter does not add source excerpts or an absolute scan root; notes
+entered by a person can still contain sensitive information.
+
+Compare two saved packets, placing the earlier packet first:
+
+```sh
+go run ./cmd/release-evidence compare --output .cache/changes.html previous.json current.json
+go run ./cmd/release-evidence compare --format markdown --output .cache/changes.md previous.json current.json
+go run ./cmd/release-evidence compare --format json previous.json current.json
+```
+
+Comparison matches rules by their stable identifier and distinguishes added,
+removed, changed, and unchanged observations. Human assessment and decision
+changes are listed separately, alongside current unknown or not-observed
+evidence. Timestamps and collection ordering do not count as evidence changes.
+Different detector versions, scan boundaries, diagnostics, incomplete scans,
+or unknown revision/working-tree state are called out explicitly.
+
+Confirm that both packets describe the intended repository. Comparison checks
+recorded observations and citation locations, not file contents or deployed
+systems. Removing a rule does not establish that its evidence disappeared.
+The evidence digest is reproducibility metadata, not a signature; it does not
+cover human judgments or establish who entered them.
+
+`export` defaults to HTML; `compare` also supports Markdown and JSON. Omit
+`--output`, or use `--output -`, to write the result to standard output.
+Files are replaced only after successful rendering and flushing. An output
+cannot replace either input packet, and links or directories are rejected as
+output targets. Use `.cache/` for local reports to keep them out of this source
+repository. Reports remain experimental evidence records, not release approval.
+
 ## What the results mean
 
 Each detector produces one of these machine-observation states:

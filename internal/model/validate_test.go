@@ -10,6 +10,21 @@ func TestValidatePacketRejectsEscapingCitation(t *testing.T) {
 	}
 }
 
+func TestValidatePacketRejectsAbsolutePathsAcrossPlatforms(t *testing.T) {
+	for _, value := range []string{"/private/source", "C:/private/source", "C:source", "C:\\private\\source", "//server/share/source"} {
+		p := minimallyValidPacket()
+		p.Findings[0].Citations[0].Path = value
+		if err := ValidatePacket(p); err == nil {
+			t.Fatalf("accepted absolute or drive-relative citation %q", value)
+		}
+		p = minimallyValidPacket()
+		p.Diagnostics = []Diagnostic{{Code: "test", Severity: "warning", Path: value, Message: "Test diagnostic"}}
+		if err := ValidatePacket(p); err == nil {
+			t.Fatalf("accepted absolute or drive-relative diagnostic %q", value)
+		}
+	}
+}
+
 func minimallyValidPacket() Packet {
 	return Packet{
 		SchemaVersion: SchemaVersion,

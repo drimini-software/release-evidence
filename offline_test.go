@@ -14,10 +14,13 @@ import (
 func TestFirstSliceHasNoNetworkImports(t *testing.T) {
 	for _, root := range []string{
 		"cmd/release-evidence",
+		"internal/comparison",
 		"internal/detector",
 		"internal/model",
+		"internal/output",
 		"internal/packet",
 		"internal/repository",
+		"internal/report",
 		"internal/scanner",
 	} {
 		err := filepath.WalkDir(root, func(filePath string, entry fs.DirEntry, walkErr error) error {
