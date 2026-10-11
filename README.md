@@ -42,6 +42,15 @@ session's observations and recorded judgments without another scan. Editing
 pauses while saving or preparing a download. Downloading does not save review
 state, and the browser chooses the destination.
 
+Use **See what changed** to select an earlier saved JSON packet (up to 4 MiB)
+and download a comparison with the current review as HTML, Markdown, or JSON.
+Save edits first and confirm that the selected packet describes the intended
+repository. Open the downloaded comparison to inspect changes and warnings.
+The earlier file is processed by the local session for that response; it is
+not saved as review history. Review confidential text from both packets before
+sharing. A JSON comparison is a change record, not an input packet for another
+comparison.
+
 ## Portable reports and comparisons
 
 Export a saved scan or review packet without access to its repository:

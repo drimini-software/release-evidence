@@ -186,8 +186,8 @@ button { border: 0; border-radius: .2rem; padding: .9rem 1.25rem; background: va
 
 button:disabled { cursor: default; opacity: .55; box-shadow: none; }
 
-#save-status, #export-status { margin: 0; color: var(--muted); }
-#save-status[data-error="true"], #export-status[data-error="true"] { color: var(--not-observed); font-weight: 700; }
+#save-status, #export-status, #comparison-status { margin: 0; color: var(--muted); overflow-wrap: anywhere; }
+#save-status[data-error="true"], #export-status[data-error="true"], #comparison-status[data-error="true"] { color: var(--not-observed); font-weight: 700; }
 #save-status[data-state="dirty"] { color: var(--coral-text); font-weight: 750; }
 #save-status[data-state="saved"] { color: var(--observed); font-weight: 750; }
 

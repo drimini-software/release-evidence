@@ -246,6 +246,8 @@ func (session *session) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 		session.updateReview(writer, request)
 	case "/api/export":
 		session.exportPacket(writer, request)
+	case "/api/compare":
+		session.comparePacket(writer, request)
 	default:
 		writeError(writer, http.StatusNotFound, "Not found.")
 	}

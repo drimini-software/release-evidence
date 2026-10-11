@@ -17,21 +17,7 @@ const maxExportRequestBytes = 1024
 // exportPacket renders one in-memory snapshot. It never scans the repository,
 // writes review state, or accepts a server-side output path.
 func (session *session) exportPacket(writer http.ResponseWriter, request *http.Request) {
-	if request.Method != http.MethodPost {
-		methodNotAllowed(writer, http.MethodPost)
-		return
-	}
-	if request.Header.Get("Origin") != session.expectedOrigin {
-		writeError(writer, http.StatusForbidden, "A same-origin review request is required.")
-		return
-	}
-	if !session.authorized(request) {
-		writeError(writer, http.StatusUnauthorized, "The review session token is missing or invalid.")
-		return
-	}
-	mediaType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
-	if err != nil || mediaType != "application/json" {
-		writeError(writer, http.StatusUnsupportedMediaType, "Export requests must use application/json.")
+	if !session.authorizeDownload(writer, request) {
 		return
 	}
 
@@ -71,6 +57,7 @@ func (session *session) exportPacket(writer http.ResponseWriter, request *http.R
 	session.mu.RUnlock()
 
 	var output bytes.Buffer
+	var err error
 	if options.Format == "json" {
 		err = model.ValidatePacket(current)
 		if err == nil {
@@ -93,4 +80,25 @@ func (session *session) exportPacket(writer http.ResponseWriter, request *http.R
 	writer.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
 	writer.WriteHeader(http.StatusOK)
 	_, _ = writer.Write(output.Bytes())
+}
+
+func (session *session) authorizeDownload(writer http.ResponseWriter, request *http.Request) bool {
+	if request.Method != http.MethodPost {
+		methodNotAllowed(writer, http.MethodPost)
+		return false
+	}
+	if request.Header.Get("Origin") != session.expectedOrigin {
+		writeError(writer, http.StatusForbidden, "A same-origin review request is required.")
+		return false
+	}
+	if !session.authorized(request) {
+		writeError(writer, http.StatusUnauthorized, "The review session token is missing or invalid.")
+		return false
+	}
+	mediaType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
+	if err != nil || mediaType != "application/json" {
+		writeError(writer, http.StatusUnsupportedMediaType, "Download requests must use application/json.")
+		return false
+	}
+	return true
 }

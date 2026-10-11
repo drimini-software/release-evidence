@@ -4,6 +4,7 @@ type AssessmentStatus = "not_started" | "in_progress" | "complete";
 type DecisionStatus = "not_made" | "approved" | "blocked" | "needs_work";
 type SaveState = "loading" | "clean" | "dirty" | "saving" | "saved" | "error";
 type ExportFormat = "html" | "markdown" | "json";
+type DownloadOptions = Record<ExportFormat, { button: HTMLButtonElement; filename: string; label: string }>;
 
 interface Citation {
   path: string;
@@ -91,17 +92,28 @@ const saveStatus = mustElement<HTMLElement>("#save-status");
 const diagnosticsRoot = mustElement<HTMLElement>("#diagnostics");
 const exportControls = mustElement<HTMLElement>("#export-controls");
 const exportStatus = mustElement<HTMLElement>("#export-status");
-const exportOptions: Record<ExportFormat, { button: HTMLButtonElement; filename: string; label: string }> = {
+const exportOptions: DownloadOptions = {
   html: { button: mustElement<HTMLButtonElement>("#export-html"), filename: "release-evidence-report.html", label: "HTML report" },
   markdown: { button: mustElement<HTMLButtonElement>("#export-markdown"), filename: "release-evidence-report.md", label: "Markdown report" },
   json: { button: mustElement<HTMLButtonElement>("#export-json"), filename: "release-evidence-packet.json", label: "JSON packet" },
 };
+const comparisonControls = mustElement<HTMLElement>("#comparison-controls");
+const comparisonStatus = mustElement<HTMLElement>("#comparison-status");
+const earlierPacketInput = mustElement<HTMLInputElement>("#comparison-packet");
+const comparisonOptions: DownloadOptions = {
+  html: { button: mustElement<HTMLButtonElement>("#compare-html"), filename: "release-evidence-comparison.html", label: "HTML comparison" },
+  markdown: { button: mustElement<HTMLButtonElement>("#compare-markdown"), filename: "release-evidence-comparison.md", label: "Markdown comparison" },
+  json: { button: mustElement<HTMLButtonElement>("#compare-json"), filename: "release-evidence-comparison.json", label: "JSON comparison" },
+};
+const maxEarlierPacketBytes = 4 * 1024 * 1024;
 
 let packet: Packet;
 let isLoaded = false;
 let isDirty = false;
 let isSaving = false;
 let isExporting = false;
+let isComparing = false;
+let earlierPacket: File | null = null;
 
 void load();
 
@@ -115,7 +127,10 @@ reviewForm.addEventListener("submit", (event) => {
 
 for (const format of ["html", "markdown", "json"] as const) {
   exportOptions[format].button.addEventListener("click", () => { void download(format); });
+  comparisonOptions[format].button.addEventListener("click", () => { void download(format, true); });
 }
+
+earlierPacketInput.addEventListener("change", selectEarlierPacket);
 
 window.addEventListener("beforeunload", (event) => {
   if (!isDirty) return;
@@ -137,6 +152,7 @@ async function load(): Promise<void> {
     setStatus(errorMessage(error), true, "error");
     setExportStatus("Downloads are unavailable because the packet could not be loaded.", true);
   } finally {
+    updateComparisonHint();
     refreshActions();
   }
 }
@@ -278,12 +294,13 @@ function createFinding(finding: Finding, existing?: AssessmentItem): HTMLElement
 }
 
 async function save(): Promise<void> {
-  if (!isLoaded || !isDirty || isSaving || isExporting) return;
+  if (!isLoaded || !isDirty || isSaving || isExporting || isComparing) return;
   isSaving = true;
   refreshActions();
   saveButton.textContent = "Saving…";
   setStatus("Saving changes to this local packet…", false, "saving");
   setExportStatus("Downloads will be available after saving finishes.", false);
+  updateComparisonHint();
   try {
     const update: ReviewUpdate = {
       assessment: {
@@ -312,22 +329,27 @@ async function save(): Promise<void> {
   } finally {
     isSaving = false;
     saveButton.textContent = "Save changes";
+    updateComparisonHint();
     refreshActions();
   }
 }
 
-async function download(format: ExportFormat): Promise<void> {
-  if (!isLoaded || isDirty || isSaving || isExporting) return;
-  const option = exportOptions[format];
+async function download(format: ExportFormat, compare = false): Promise<void> {
+  if (!isLoaded || isDirty || isSaving || isExporting || isComparing) return;
+  const previous = earlierPacket;
+  if (compare && !previous) return;
+  const option = (compare ? comparisonOptions : exportOptions)[format];
+  const setDownloadStatus = compare ? setComparisonStatus : setExportStatus;
   const restoreFocus = document.activeElement === option.button;
-  isExporting = true;
+  if (compare) isComparing = true;
+  else isExporting = true;
   refreshActions();
-  setExportStatus(`Preparing ${option.label}…`, false);
+  setDownloadStatus(`Preparing ${option.label}…`, false);
   try {
-    const response = await requestResponse("/api/export", {
+    const response = await requestResponse(compare ? `/api/compare?format=${format}` : "/api/export", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ format }),
+      body: compare ? previous : JSON.stringify({ format }),
     });
     const url = URL.createObjectURL(await response.blob());
     try {
@@ -341,18 +363,19 @@ async function download(format: ExportFormat): Promise<void> {
     } finally {
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
-    setExportStatus(`${option.label} download started. Check your browser's downloads.`, false);
+    setDownloadStatus(`${option.label} download started. Check your browser's downloads.`, false);
   } catch (error) {
-    setExportStatus(`Download failed. ${errorMessage(error)}`, true);
+    setDownloadStatus(`Download failed. ${errorMessage(error)}`, true);
   } finally {
-    isExporting = false;
+    if (compare) isComparing = false;
+    else isExporting = false;
     refreshActions();
     if (restoreFocus && document.activeElement === document.body) option.button.focus({ preventScroll: true });
   }
 }
 
 function refreshActions(): void {
-  const busy = isSaving || isExporting;
+  const busy = isSaving || isExporting || isComparing;
   saveButton.disabled = !isLoaded || !isDirty || busy;
   reviewForm.setAttribute("aria-busy", String(busy));
   for (const control of reviewForm.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("input, select, textarea")) {
@@ -362,11 +385,48 @@ function refreshActions(): void {
   for (const option of Object.values(exportOptions)) {
     option.button.disabled = !isLoaded || isDirty || busy;
   }
+  comparisonControls.setAttribute("aria-busy", String(isComparing));
+  earlierPacketInput.disabled = !isLoaded || busy;
+  for (const option of Object.values(comparisonOptions)) {
+    option.button.disabled = !isLoaded || isDirty || busy || !earlierPacket;
+  }
 }
 
 function setExportStatus(message: string, isError: boolean): void {
   exportStatus.textContent = message;
   exportStatus.dataset.error = String(isError);
+}
+
+function selectEarlierPacket(): void {
+  earlierPacket = earlierPacketInput.files?.[0] ?? null;
+  if (earlierPacket && (earlierPacket.size === 0 || earlierPacket.size > maxEarlierPacketBytes)) {
+    const message = earlierPacket.size === 0 ? "The earlier packet is empty. Choose a saved JSON packet." : "The earlier packet exceeds the 4 MiB limit. Choose a smaller saved packet.";
+    earlierPacket = null;
+    earlierPacketInput.value = "";
+    setComparisonStatus(message, true);
+  } else {
+    updateComparisonHint();
+  }
+  refreshActions();
+}
+
+function updateComparisonHint(): void {
+  if (!isLoaded) {
+    setComparisonStatus("Comparisons are unavailable until the current packet loads.", false);
+  } else if (isSaving) {
+    setComparisonStatus("Comparisons will be available after saving finishes.", false);
+  } else if (isDirty) {
+    setComparisonStatus("Save changes before comparing. Unsaved edits are excluded from comparisons.", false);
+  } else if (earlierPacket) {
+    setComparisonStatus(`Earlier packet selected: ${earlierPacket.name}. Choose a comparison format.`, false);
+  } else {
+    setComparisonStatus("Choose an earlier saved JSON packet to compare with the current review.", false);
+  }
+}
+
+function setComparisonStatus(message: string, isError: boolean): void {
+  comparisonStatus.textContent = message;
+  comparisonStatus.dataset.error = String(isError);
 }
 
 function collectAssessmentItems(): AssessmentItem[] {
@@ -490,11 +550,12 @@ function findingResult(finding: Finding): string {
 }
 
 function markDirty(): void {
-  if (!isLoaded || isSaving || isExporting) return;
+  if (!isLoaded || isSaving || isExporting || isComparing) return;
   isDirty = true;
   refreshActions();
   setStatus("Unsaved changes in this packet.", false, "dirty");
   setExportStatus("Save changes before downloading. Unsaved edits are excluded from exports.", false);
+  updateComparisonHint();
 }
 
 function lastSavedMessage(current: Packet, justSaved: boolean): string {

@@ -1,6 +1,6 @@
 # Release Evidence architecture
 
-Status: Implemented scanner, local review/downloads, and command-line export/comparison
+Status: Implemented scanner, local review/report and comparison downloads, and CLI export/comparison
 Last reviewed: 2026-10-11
 
 ## Architectural goal
@@ -208,6 +208,15 @@ validates the packet and evidence digest. Attachment filenames are fixed;
 repository and reviewer strings cannot enter headers or server-side paths.
 This endpoint neither rescans the repository nor writes review state.
 
+`POST /api/compare?format=html|markdown|json` uses the same download-request
+authorization. Its body is the earlier saved JSON packet, limited to 4 MiB,
+with strict packet decoding, schema validation, and evidence-digest checks.
+Only one format parameter is accepted; no filesystem paths or extra parameters
+are accepted. The current packet is a stable session snapshot. The existing
+comparison engine produces JSON, and the report renderer produces HTML or
+Markdown, entirely before fixed attachment headers are committed. The earlier
+packet is not retained, and neither packet nor review state is changed.
+
 ### 7. Interface
 
 The interface receives normalized facts and assessment data, never arbitrary
@@ -220,14 +229,18 @@ Primary views:
 - finding explanation, citations, and limitations;
 - unanswered human questions;
 - owners and residual actions;
-- current packet downloads as HTML, Markdown, and JSON.
+- current packet downloads as HTML, Markdown, and JSON;
+- an earlier-packet file picker and comparison downloads in those formats.
 
-Prior-packet comparison remains a command-line workflow. The review page is
-the current packet preview, with a disclosure reminder beside its download
+The comparison is read in its downloaded report rather than inline. The review
+page is the current packet preview, with a disclosure reminder beside its download
 controls. Unsaved edits block downloading; failed saves retain those edits and
 keep downloads blocked. Inputs pause during saving and exporting so a user
 cannot accidentally make an edit that is discarded by an in-flight save or
 excluded from a download. Failures remain visible and controls allow retry.
+Comparison also pauses editing and file selection. Empty and oversized earlier
+files are rejected in the browser before transfer; the server validates all
+selected packet content. Filenames and status feedback render as inert text.
 
 Color is secondary to text and icon labels. Every interaction works by keyboard
 and exposes an accessible name, state, and error.

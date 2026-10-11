@@ -146,6 +146,29 @@
           <p id="export-status" role="status" aria-live="polite">Downloads are available after the packet loads.</p>
         </div>
       </section>
+
+      <section class="exports" id="comparison-controls" aria-labelledby="comparison-title" aria-busy="false">
+        <div>
+          <p class="eyebrow">Two packets</p>
+          <h2 id="comparison-title">See what changed.</h2>
+          <p>Compare an earlier saved packet with the current review. Save edits first, then open the downloaded comparison to review its changes and warnings.</p>
+        </div>
+        <div class="exports__controls">
+          <label class="control">
+            <span class="control__label">Earlier packet (JSON)</span>
+            <input id="comparison-packet" type="file" accept=".json,application/json" aria-describedby="comparison-help comparison-status" disabled />
+          </label>
+          <p id="comparison-help" class="exports__hint">Choose a saved Release Evidence packet up to 4 MiB. Confirm that it describes the intended repository. The file is read by this local session and is not retained as review history.</p>
+          <div class="exports__buttons">
+            <button id="compare-html" type="button" aria-describedby="comparison-help comparison-privacy" disabled>Compare as HTML</button>
+            <button id="compare-markdown" type="button" aria-describedby="comparison-help comparison-privacy" disabled>Compare as Markdown</button>
+            <button id="compare-json" type="button" aria-describedby="comparison-help comparison-privacy" disabled>Compare as JSON</button>
+          </div>
+          <p class="exports__hint">HTML and Markdown include the current report and earlier observations for changed rules. JSON contains a change record. Comparisons cover recorded observations and citations; they do not compare source-file contents.</p>
+          <p id="comparison-privacy" class="exports__hint">Review confidential filenames, owners, and notes from both packets before sharing.</p>
+          <p id="comparison-status" role="status" aria-live="polite">Comparisons are available after the current packet loads.</p>
+        </div>
+      </section>
     </main>
 
     <footer class="footer shell">
