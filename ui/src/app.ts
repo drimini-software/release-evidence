@@ -108,6 +108,8 @@ const comparisonOptions: DownloadOptions = {
 const maxEarlierPacketBytes = 4 * 1024 * 1024;
 
 let packet: Packet;
+let packetVersion = "";
+let hasSaveConflict = false;
 let isLoaded = false;
 let isDirty = false;
 let isSaving = false;
@@ -142,7 +144,7 @@ async function load(): Promise<void> {
   refreshActions();
   setStatus("Loading local evidence…", false, "loading");
   try {
-    packet = await request<Packet>("/api/packet", { method: "GET" });
+    packet = await requestPacket("/api/packet", { method: "GET" });
     render();
     isLoaded = true;
     isDirty = false;
@@ -294,7 +296,7 @@ function createFinding(finding: Finding, existing?: AssessmentItem): HTMLElement
 }
 
 async function save(): Promise<void> {
-  if (!isLoaded || !isDirty || isSaving || isExporting || isComparing) return;
+  if (!isLoaded || !isDirty || hasSaveConflict || isSaving || isExporting || isComparing) return;
   isSaving = true;
   refreshActions();
   saveButton.textContent = "Saving…";
@@ -314,9 +316,9 @@ async function save(): Promise<void> {
         rationale: decisionRationale.value.trim(),
       },
     };
-    packet = await request<Packet>("/api/review", {
+    packet = await requestPacket("/api/review", {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "If-Match": packetVersion },
       body: JSON.stringify(update),
     });
     render();
@@ -324,6 +326,7 @@ async function save(): Promise<void> {
     setStatus(lastSavedMessage(packet, true), false, "saved");
     setExportStatus("Ready to download the current packet.", false);
   } catch (error) {
+    hasSaveConflict = error instanceof RequestError && error.status === 412;
     setStatus(errorMessage(error), true, "error");
     setExportStatus("Save changes before downloading. Unsaved edits are excluded from exports.", false);
   } finally {
@@ -331,6 +334,10 @@ async function save(): Promise<void> {
     saveButton.textContent = "Save changes";
     updateComparisonHint();
     refreshActions();
+    if (hasSaveConflict) {
+      saveStatus.tabIndex = -1;
+      saveStatus.focus();
+    }
   }
 }
 
@@ -376,7 +383,7 @@ async function download(format: ExportFormat, compare = false): Promise<void> {
 
 function refreshActions(): void {
   const busy = isSaving || isExporting || isComparing;
-  saveButton.disabled = !isLoaded || !isDirty || busy;
+  saveButton.disabled = !isLoaded || !isDirty || hasSaveConflict || busy;
   reviewForm.setAttribute("aria-busy", String(busy));
   for (const control of reviewForm.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("input, select, textarea")) {
     control.disabled = !isLoaded || busy;
@@ -449,8 +456,21 @@ function collectAssessmentItems(): AssessmentItem[] {
   return items;
 }
 
-async function request<T>(url: string, init: RequestInit): Promise<T> {
-  return (await (await requestResponse(url, init)).json()) as T;
+async function requestPacket(url: string, init: RequestInit): Promise<Packet> {
+  const response = await requestResponse(url, init);
+  const result = (await response.json()) as Packet;
+  const version = response.headers.get("ETag");
+  if (!version || !/^"[^"]+"$/.test(version)) {
+    throw new Error("The review version is unavailable. Keep a copy of your edits, then reload the page.");
+  }
+  packetVersion = version;
+  return result;
+}
+
+class RequestError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
 }
 
 async function requestResponse(url: string, init: RequestInit): Promise<Response> {
@@ -459,7 +479,7 @@ async function requestResponse(url: string, init: RequestInit): Promise<Response
   const response = await fetch(url, { ...init, headers, credentials: "same-origin" });
   if (!response.ok) {
     const body = (await response.json().catch(() => ({ error: `Request failed (${response.status}).` }))) as { error?: string };
-    throw new Error(body.error ?? `Request failed (${response.status}).`);
+    throw new RequestError(body.error ?? `Request failed (${response.status}).`, response.status);
   }
   return response;
 }
@@ -553,7 +573,7 @@ function markDirty(): void {
   if (!isLoaded || isSaving || isExporting || isComparing) return;
   isDirty = true;
   refreshActions();
-  setStatus("Unsaved changes in this packet.", false, "dirty");
+  if (!hasSaveConflict) setStatus("Unsaved changes in this packet.", false, "dirty");
   setExportStatus("Save changes before downloading. Unsaved edits are excluded from exports.", false);
   updateComparisonHint();
 }

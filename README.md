@@ -36,6 +36,14 @@ go run ./cmd/release-evidence review /path/to/repository
 saved atomically outside the scanned repository by default. Pass
 `--state /path/to/packet.json` when you want an explicit location.
 
+Multiple tabs of one review session cannot silently replace each other's newer
+saved changes. A stale save keeps the tab's edits visible and blocks saving and
+downloads. Copy the pending edits before reloading, inspect the latest saved
+review, then reapply the changes you still want. Changes are not merged or
+overwritten automatically. A save whose success response was lost can also
+require this recovery. This protection applies within one running review
+process; it does not lock a state file shared by separate processes.
+
 Use **Keep a copy** on the review page to download HTML, Markdown, or the
 complete JSON packet. Save any edits first; downloads include the current
 session's observations and recorded judgments without another scan. Editing
@@ -143,6 +151,7 @@ compatibility.
 ```sh
 go test ./...
 go vet ./...
+go test -race ./internal/review
 
 # Optional bounded fuzz runs; CI runs both targets for 20 seconds each.
 go test ./internal/packet -run '^$' -fuzz '^FuzzDecodePacket$' -fuzztime 20s -parallel 2
@@ -158,6 +167,10 @@ pnpm test:e2e
 The TypeScript build writes the interface bundle embedded by the Go executable.
 Synthetic scanner inputs live in `fixtures/`, and the packet contract is in
 `schema/packet.schema.json`.
+
+The race-detector check needs a supported platform and an available C compiler.
+CI runs it on Ubuntu. See Go's
+[race-detector documentation](https://go.dev/doc/articles/race_detector.html).
 
 Ordinary `go test ./...` also runs the fuzz seed cases. The two bounded CI runs
 exercise damaged packet imports and valid hostile text through encoding,

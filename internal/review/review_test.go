@@ -123,6 +123,7 @@ func TestReviewUpdateRequiresSameOriginAndPersistsAtomically(t *testing.T) {
 	valid := httptest.NewRequest(http.MethodPut, testOrigin+"/api/review", bytes.NewReader(body))
 	valid.Host = testHost
 	valid.Header.Set("Origin", testOrigin)
+	valid.Header.Set("If-Match", readReviewVersion(t, session))
 	valid.Header.Set("Content-Type", "application/json")
 	valid.Header.Set("X-Release-Evidence-Token", testToken)
 	validResponse := httptest.NewRecorder()
@@ -149,6 +150,7 @@ func TestReviewUpdateRejectsUnknownFinding(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPut, testOrigin+"/api/review", strings.NewReader(update))
 	request.Host = testHost
 	request.Header.Set("Origin", testOrigin)
+	request.Header.Set("If-Match", readReviewVersion(t, session))
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("X-Release-Evidence-Token", testToken)
 	response := httptest.NewRecorder()

@@ -51,6 +51,8 @@ type reviewUpdate struct {
 type session struct {
 	mu             sync.RWMutex
 	packet         model.Packet
+	revisionID     string
+	revision       uint64
 	token          string
 	expectedHost   string
 	expectedOrigin string
@@ -209,8 +211,14 @@ func newSession(current model.Packet, token, expectedHost, expectedOrigin, state
 	if onActivity == nil {
 		onActivity = func() {}
 	}
+	revisionID, err := newToken()
+	if err != nil {
+		return nil, fmt.Errorf("create review version: %w", err)
+	}
 	return &session{
 		packet:         current,
+		revisionID:     revisionID,
+		revision:       1,
 		token:          token,
 		expectedHost:   expectedHost,
 		expectedOrigin: expectedOrigin,
@@ -290,7 +298,9 @@ func (session *session) servePacket(writer http.ResponseWriter, request *http.Re
 	}
 	session.mu.RLock()
 	current := session.packet
+	version := session.currentETag()
 	session.mu.RUnlock()
+	writer.Header().Set("ETag", version)
 	writeJSON(writer, http.StatusOK, current)
 }
 
@@ -310,6 +320,10 @@ func (session *session) updateReview(writer http.ResponseWriter, request *http.R
 	mediaType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
 	if err != nil || mediaType != "application/json" {
 		writeError(writer, http.StatusUnsupportedMediaType, "Review updates must use application/json.")
+		return
+	}
+	if request.Header.Get("If-Match") == "" {
+		writeError(writer, http.StatusPreconditionRequired, "Load the current review before saving changes.")
 		return
 	}
 
@@ -336,6 +350,11 @@ func (session *session) updateReview(writer http.ResponseWriter, request *http.R
 
 	session.mu.Lock()
 	defer session.mu.Unlock()
+	versions := request.Header.Values("If-Match")
+	if len(versions) != 1 || strings.TrimSpace(versions[0]) != session.currentETag() {
+		writeError(writer, http.StatusPreconditionFailed, "This review has newer saved changes. Your edits remain here. Copy them before reloading the page, then review and reapply them.")
+		return
+	}
 	candidate := session.packet
 	candidate.Assessment = update.Assessment
 	candidate.Decision = update.Decision
@@ -354,7 +373,15 @@ func (session *session) updateReview(writer http.ResponseWriter, request *http.R
 		}
 	}
 	session.packet = candidate
+	session.revision++
+	writer.Header().Set("ETag", session.currentETag())
 	writeJSON(writer, http.StatusOK, candidate)
+}
+
+// Call only while holding the session lock. Versions are opaque, per-process
+// metadata, separate from the capability token and the saved evidence digest.
+func (session *session) currentETag() string {
+	return fmt.Sprintf(`"review-%s-%d"`, session.revisionID, session.revision)
 }
 
 func (session *session) authorized(request *http.Request) bool {

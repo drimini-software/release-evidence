@@ -32,6 +32,8 @@ const comparisonOptions = {
 };
 const maxEarlierPacketBytes = 4 * 1024 * 1024;
 let packet;
+let packetVersion = "";
+let hasSaveConflict = false;
 let isLoaded = false;
 let isDirty = false;
 let isSaving = false;
@@ -60,7 +62,7 @@ async function load() {
     refreshActions();
     setStatus("Loading local evidence…", false, "loading");
     try {
-        packet = await request("/api/packet", { method: "GET" });
+        packet = await requestPacket("/api/packet", { method: "GET" });
         render();
         isLoaded = true;
         isDirty = false;
@@ -177,7 +179,7 @@ function createFinding(finding, existing) {
     return article;
 }
 async function save() {
-    if (!isLoaded || !isDirty || isSaving || isExporting || isComparing)
+    if (!isLoaded || !isDirty || hasSaveConflict || isSaving || isExporting || isComparing)
         return;
     isSaving = true;
     refreshActions();
@@ -198,9 +200,9 @@ async function save() {
                 rationale: decisionRationale.value.trim(),
             },
         };
-        packet = await request("/api/review", {
+        packet = await requestPacket("/api/review", {
             method: "PUT",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", "If-Match": packetVersion },
             body: JSON.stringify(update),
         });
         render();
@@ -209,6 +211,7 @@ async function save() {
         setExportStatus("Ready to download the current packet.", false);
     }
     catch (error) {
+        hasSaveConflict = error instanceof RequestError && error.status === 412;
         setStatus(errorMessage(error), true, "error");
         setExportStatus("Save changes before downloading. Unsaved edits are excluded from exports.", false);
     }
@@ -217,6 +220,10 @@ async function save() {
         saveButton.textContent = "Save changes";
         updateComparisonHint();
         refreshActions();
+        if (hasSaveConflict) {
+            saveStatus.tabIndex = -1;
+            saveStatus.focus();
+        }
     }
 }
 async function download(format, compare = false) {
@@ -270,7 +277,7 @@ async function download(format, compare = false) {
 }
 function refreshActions() {
     const busy = isSaving || isExporting || isComparing;
-    saveButton.disabled = !isLoaded || !isDirty || busy;
+    saveButton.disabled = !isLoaded || !isDirty || hasSaveConflict || busy;
     reviewForm.setAttribute("aria-busy", String(busy));
     for (const control of reviewForm.querySelectorAll("input, select, textarea")) {
         control.disabled = !isLoaded || busy;
@@ -343,8 +350,22 @@ function collectAssessmentItems() {
     }
     return items;
 }
-async function request(url, init) {
-    return (await (await requestResponse(url, init)).json());
+async function requestPacket(url, init) {
+    const response = await requestResponse(url, init);
+    const result = (await response.json());
+    const version = response.headers.get("ETag");
+    if (!version || !/^"[^"]+"$/.test(version)) {
+        throw new Error("The review version is unavailable. Keep a copy of your edits, then reload the page.");
+    }
+    packetVersion = version;
+    return result;
+}
+class RequestError extends Error {
+    status;
+    constructor(message, status) {
+        super(message);
+        this.status = status;
+    }
 }
 async function requestResponse(url, init) {
     const headers = new Headers(init.headers);
@@ -352,7 +373,7 @@ async function requestResponse(url, init) {
     const response = await fetch(url, { ...init, headers, credentials: "same-origin" });
     if (!response.ok) {
         const body = (await response.json().catch(() => ({ error: `Request failed (${response.status}).` })));
-        throw new Error(body.error ?? `Request failed (${response.status}).`);
+        throw new RequestError(body.error ?? `Request failed (${response.status}).`, response.status);
     }
     return response;
 }
@@ -434,7 +455,8 @@ function markDirty() {
         return;
     isDirty = true;
     refreshActions();
-    setStatus("Unsaved changes in this packet.", false, "dirty");
+    if (!hasSaveConflict)
+        setStatus("Unsaved changes in this packet.", false, "dirty");
     setExportStatus("Save changes before downloading. Unsaved edits are excluded from exports.", false);
     updateComparisonHint();
 }

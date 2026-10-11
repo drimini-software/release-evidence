@@ -149,6 +149,103 @@ test("keeps downloads unavailable when the initial packet cannot load", async ({
   for (const id of ["html", "markdown", "json"]) await expect(page.locator(`#export-${id}`)).toBeDisabled();
 });
 
+test("rejects a stale tab save without losing edits and allows explicit recovery", async ({ page, context }, testInfo) => {
+  await page.goto("/");
+  await expect(page.locator("#export-html")).toBeEnabled();
+  const other = await context.newPage();
+  await other.goto("/");
+  await expect(other.locator("#export-html")).toBeEnabled();
+  await other.getByLabel("Context").fill("Keep the second tab's pending context");
+  await other.getByLabel("Decision owner").fill("Second tab owner");
+  await page.getByLabel("Context").fill("First tab's newer saved context");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.locator("#save-status")).toContainText("Saved locally");
+
+  let attempts = 0;
+  other.on("request", (request) => {
+    if (request.url().endsWith("/api/review") && request.method() === "PUT") attempts++;
+  });
+  const rejected = other.waitForResponse((response) => response.url().endsWith("/api/review"));
+  await other.getByRole("button", { name: "Save changes" }).click();
+  expect((await rejected).status()).toBe(412);
+  await expect(other.locator("#save-status")).toContainText("This review has newer saved changes");
+  await expect(other.locator("#save-status")).toContainText("Copy them before reloading");
+  await expect(other.locator("#save-status")).toBeFocused();
+  await expect(other.getByLabel("Context")).toHaveValue("Keep the second tab's pending context");
+  await expect(other.getByLabel("Decision owner")).toHaveValue("Second tab owner");
+  await expect(other.getByLabel("Context")).toBeEnabled();
+  await expect(other.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  for (const format of ["html", "markdown", "json"]) await expect(other.locator(`#export-${format}`)).toBeDisabled();
+  await other.getByLabel("Context").fill("Copy this edited context before reload");
+  await expect(other.locator("#save-status")).toContainText("newer saved changes");
+  await other.getByLabel("Decision owner").press("Enter");
+  expect(attempts).toBe(1);
+  const saved = await other.evaluate(async () => {
+    const token = document.querySelector<HTMLMetaElement>('meta[name="review-token"]')!.content;
+    return (await fetch("/api/packet", { headers: { "X-Release-Evidence-Token": token } })).json();
+  });
+  expect(saved.assessment.context).toBe("First tab's newer saved context");
+  const accessibility = await new AxeBuilder({ page: other }).analyze();
+  expect(accessibility.violations).toEqual([]);
+  await other.setViewportSize({ width: 360, height: 800 });
+  const sizes = await other.evaluate(() => ({ width: document.documentElement.scrollWidth, viewport: window.innerWidth }));
+  expect(sizes.width).toBeLessThanOrEqual(sizes.viewport);
+  await other.locator(".save-dock").screenshot({ path: testInfo.outputPath("save-conflict.png") });
+
+  const copiedContext = await other.getByLabel("Context").inputValue();
+  const copiedOwner = await other.getByLabel("Decision owner").inputValue();
+  other.once("dialog", (dialog) => { void dialog.accept(); });
+  await other.reload();
+  await expect(other.getByLabel("Context")).toHaveValue("First tab's newer saved context");
+  await other.getByLabel("Context").fill(`${saved.assessment.context}; ${copiedContext}`);
+  await other.getByLabel("Decision owner").fill(copiedOwner);
+  await other.getByRole("button", { name: "Save changes" }).click();
+  await expect(other.locator("#save-status")).toContainText("Saved locally");
+  await expect(other.getByLabel("Context")).toHaveValue("First tab's newer saved context; Copy this edited context before reload");
+  await expect(other.locator("#export-html")).toBeEnabled();
+  await other.close();
+});
+
+test("fails closed when a loaded packet has no review version", async ({ page }) => {
+  await page.route("**/api/packet", async (route) => {
+    const response = await route.fetch();
+    const headers = response.headers();
+    delete headers.etag;
+    await route.fulfill({ response, headers });
+  });
+  await page.goto("/");
+  await expect(page.locator("#save-status")).toContainText("review version is unavailable");
+  await expect(page.getByLabel("Context")).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  await expect(page.locator("#export-json")).toBeDisabled();
+});
+
+test("preserves edits when a save commits but its successful response is lost", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator("#export-html")).toBeEnabled();
+  await page.getByLabel("Context").fill("Saved on the server before the response was lost");
+  await page.route("**/api/review", async (route) => {
+    const committed = await route.fetch();
+    expect(committed.status()).toBe(200);
+    await route.fulfill({ status: 503, contentType: "application/json", body: '{"error":"The save response was lost."}' });
+  });
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.locator("#save-status")).toContainText("save response was lost");
+  await expect(page.getByRole("button", { name: "Save changes" })).toBeEnabled();
+  await page.unroute("**/api/review");
+  await page.getByLabel("Context").fill("Keep this additional edit after the lost response");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.locator("#save-status")).toContainText("newer saved changes");
+  await expect(page.getByLabel("Context")).toHaveValue("Keep this additional edit after the lost response");
+  await expect(page.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  const savedContext = await page.evaluate(async () => {
+    const token = document.querySelector<HTMLMetaElement>('meta[name="review-token"]')!.content;
+    const current = await (await fetch("/api/packet", { headers: { "X-Release-Evidence-Token": token } })).json();
+    return current.assessment.context;
+  });
+  expect(savedContext).toBe("Saved on the server before the response was lost");
+});
+
 test("explains finding outcomes and their search boundary", async ({ page }) => {
   await page.goto("/");
 

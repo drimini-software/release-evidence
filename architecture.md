@@ -200,6 +200,22 @@ Serves embedded UI assets and a narrow JSON API. It must:
 The loopback server is still a security boundary. Binding locally does not make
 request validation optional.
 
+`GET /api/packet` returns an opaque strong `ETag` for the same immutable snapshot
+as its JSON body. `PUT /api/review` requires exactly that tag in `If-Match`,
+in addition to the existing Host, Origin, token, method, content-type, and body
+boundaries. Missing conditions return 428; stale or unsupported conditions
+return 412. This private API requires one exact strong tag and rejects weak
+tags, wildcards, tag lists, and duplicate headers. Tags include a random
+per-session identifier and a counter, separate from the capability token.
+
+The version check, candidate validation, atomic persistence, packet replacement,
+and version advance share the write lock. Only a successful save advances the
+version. Concurrent requests from one version can commit only one judgment;
+rejected updates leave the saved/current packet unchanged. Save responses return
+the committed packet and its new tag. Tags are transport metadata and do not
+change the saved schema or evidence digest. This is concurrency control within
+one process, not a file lock between separate review processes.
+
 `POST /api/export` requires the exact session origin and capability token,
 accepts only `application/json`, and limits its strict format-only request to
 1 KiB. It takes one immutable session snapshot and renders HTML, Markdown, or
@@ -238,6 +254,13 @@ controls. Unsaved edits block downloading; failed saves retain those edits and
 keep downloads blocked. Inputs pause during saving and exporting so a user
 cannot accidentally make an edit that is discarded by an in-flight save or
 excluded from a download. Failures remain visible and controls allow retry.
+The page retains the version of its last loaded or successfully saved packet.
+A conflict preserves all current inputs, focuses its explanation, and blocks
+another save or download. Editing remains possible for copying pending text.
+Further edits keep the conflict explanation visible. Recovery requires the
+operator to copy pending edits, reload the latest saved review, and consciously
+reapply them; no automatic merge or override occurs. An ordinary failed save
+remains retryable, while a lost success response can cause a conflict on retry.
 Comparison also pauses editing and file selection. Empty and oversized earlier
 files are rejected in the browser before transfer; the server validates all
 selected packet content. Filenames and status feedback render as inert text.
