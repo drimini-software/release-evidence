@@ -15,9 +15,18 @@ const decisionRationale = mustElement("#decision-rationale");
 const saveButton = mustElement("#save-review");
 const saveStatus = mustElement("#save-status");
 const diagnosticsRoot = mustElement("#diagnostics");
+const exportControls = mustElement("#export-controls");
+const exportStatus = mustElement("#export-status");
+const exportOptions = {
+    html: { button: mustElement("#export-html"), filename: "release-evidence-report.html", label: "HTML report" },
+    markdown: { button: mustElement("#export-markdown"), filename: "release-evidence-report.md", label: "Markdown report" },
+    json: { button: mustElement("#export-json"), filename: "release-evidence-packet.json", label: "JSON packet" },
+};
 let packet;
+let isLoaded = false;
 let isDirty = false;
 let isSaving = false;
+let isExporting = false;
 void load();
 reviewForm.addEventListener("input", markDirty);
 reviewForm.addEventListener("change", markDirty);
@@ -25,6 +34,9 @@ reviewForm.addEventListener("submit", (event) => {
     event.preventDefault();
     void save();
 });
+for (const format of ["html", "markdown", "json"]) {
+    exportOptions[format].button.addEventListener("click", () => { void download(format); });
+}
 window.addEventListener("beforeunload", (event) => {
     if (!isDirty)
         return;
@@ -32,18 +44,22 @@ window.addEventListener("beforeunload", (event) => {
     event.returnValue = "";
 });
 async function load() {
-    saveButton.disabled = true;
+    refreshActions();
     setStatus("Loading local evidence…", false, "loading");
     try {
         packet = await request("/api/packet", { method: "GET" });
         render();
+        isLoaded = true;
         isDirty = false;
-        saveButton.disabled = true;
         setStatus(lastSavedMessage(packet, false), false, "clean");
+        setExportStatus("Ready to download the current packet.", false);
     }
     catch (error) {
         setStatus(errorMessage(error), true, "error");
-        saveButton.disabled = true;
+        setExportStatus("Downloads are unavailable because the packet could not be loaded.", true);
+    }
+    finally {
+        refreshActions();
     }
 }
 function render() {
@@ -147,12 +163,13 @@ function createFinding(finding, existing) {
     return article;
 }
 async function save() {
-    if (!isDirty || isSaving)
+    if (!isLoaded || !isDirty || isSaving || isExporting)
         return;
     isSaving = true;
-    saveButton.disabled = true;
+    refreshActions();
     saveButton.textContent = "Saving…";
     setStatus("Saving changes to this local packet…", false, "saving");
+    setExportStatus("Downloads will be available after saving finishes.", false);
     try {
         const update = {
             assessment: {
@@ -174,15 +191,72 @@ async function save() {
         render();
         isDirty = false;
         setStatus(lastSavedMessage(packet, true), false, "saved");
+        setExportStatus("Ready to download the current packet.", false);
     }
     catch (error) {
         setStatus(errorMessage(error), true, "error");
+        setExportStatus("Save changes before downloading. Unsaved edits are excluded from exports.", false);
     }
     finally {
         isSaving = false;
         saveButton.textContent = "Save changes";
-        saveButton.disabled = !isDirty;
+        refreshActions();
     }
+}
+async function download(format) {
+    if (!isLoaded || isDirty || isSaving || isExporting)
+        return;
+    const option = exportOptions[format];
+    const restoreFocus = document.activeElement === option.button;
+    isExporting = true;
+    refreshActions();
+    setExportStatus(`Preparing ${option.label}…`, false);
+    try {
+        const response = await requestResponse("/api/export", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ format }),
+        });
+        const url = URL.createObjectURL(await response.blob());
+        try {
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = option.filename;
+            link.hidden = true;
+            document.body.append(link);
+            link.click();
+            link.remove();
+        }
+        finally {
+            window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        }
+        setExportStatus(`${option.label} download started. Check your browser's downloads.`, false);
+    }
+    catch (error) {
+        setExportStatus(`Download failed. ${errorMessage(error)}`, true);
+    }
+    finally {
+        isExporting = false;
+        refreshActions();
+        if (restoreFocus && document.activeElement === document.body)
+            option.button.focus({ preventScroll: true });
+    }
+}
+function refreshActions() {
+    const busy = isSaving || isExporting;
+    saveButton.disabled = !isLoaded || !isDirty || busy;
+    reviewForm.setAttribute("aria-busy", String(busy));
+    for (const control of reviewForm.querySelectorAll("input, select, textarea")) {
+        control.disabled = !isLoaded || busy;
+    }
+    exportControls.setAttribute("aria-busy", String(isExporting));
+    for (const option of Object.values(exportOptions)) {
+        option.button.disabled = !isLoaded || isDirty || busy;
+    }
+}
+function setExportStatus(message, isError) {
+    exportStatus.textContent = message;
+    exportStatus.dataset.error = String(isError);
 }
 function collectAssessmentItems() {
     const items = [];
@@ -205,6 +279,9 @@ function collectAssessmentItems() {
     return items;
 }
 async function request(url, init) {
+    return (await (await requestResponse(url, init)).json());
+}
+async function requestResponse(url, init) {
     const headers = new Headers(init.headers);
     headers.set("X-Release-Evidence-Token", token);
     const response = await fetch(url, { ...init, headers, credentials: "same-origin" });
@@ -212,7 +289,7 @@ async function request(url, init) {
         const body = (await response.json().catch(() => ({ error: `Request failed (${response.status}).` })));
         throw new Error(body.error ?? `Request failed (${response.status}).`);
     }
-    return (await response.json());
+    return response;
 }
 function selectControl(label, name, options, value, hint = "", hintId = "") {
     const wrapper = element("div", "control");
@@ -288,11 +365,12 @@ function findingResult(finding) {
     }
 }
 function markDirty() {
-    if (isSaving)
+    if (!isLoaded || isSaving || isExporting)
         return;
     isDirty = true;
-    saveButton.disabled = false;
+    refreshActions();
     setStatus("Unsaved changes in this packet.", false, "dirty");
+    setExportStatus("Save changes before downloading. Unsaved edits are excluded from exports.", false);
 }
 function lastSavedMessage(current, justSaved) {
     const value = current.assessment.updated_at ?? current.decision.updated_at;

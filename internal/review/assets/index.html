@@ -128,6 +128,24 @@
           </div>
         </section>
       </form>
+
+      <section class="exports" id="export-controls" aria-labelledby="export-title" aria-busy="false">
+        <div>
+          <p class="eyebrow">Portable record</p>
+          <h2 id="export-title">Keep a copy.</h2>
+          <p>Download the current packet without rescanning the repository. Save any edits first.</p>
+        </div>
+        <div class="exports__controls">
+          <p id="export-privacy">Review filenames, owner labels, and notes before sharing. Downloads can contain confidential information.</p>
+          <div class="exports__buttons" aria-describedby="export-privacy export-status">
+            <button id="export-html" type="button" disabled>Download HTML</button>
+            <button id="export-markdown" type="button" disabled>Download Markdown</button>
+            <button id="export-json" type="button" disabled>Download JSON</button>
+          </div>
+          <p class="exports__hint">HTML works offline and can be printed. Markdown is a text summary. JSON preserves the complete packet for later exports and comparisons.</p>
+          <p id="export-status" role="status" aria-live="polite">Downloads are available after the packet loads.</p>
+        </div>
+      </section>
     </main>
 
     <footer class="footer shell">

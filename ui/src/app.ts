@@ -3,6 +3,7 @@ type Disposition = "open" | "assigned" | "accepted" | "not_applicable" | "resolv
 type AssessmentStatus = "not_started" | "in_progress" | "complete";
 type DecisionStatus = "not_made" | "approved" | "blocked" | "needs_work";
 type SaveState = "loading" | "clean" | "dirty" | "saving" | "saved" | "error";
+type ExportFormat = "html" | "markdown" | "json";
 
 interface Citation {
   path: string;
@@ -88,10 +89,19 @@ const decisionRationale = mustElement<HTMLTextAreaElement>("#decision-rationale"
 const saveButton = mustElement<HTMLButtonElement>("#save-review");
 const saveStatus = mustElement<HTMLElement>("#save-status");
 const diagnosticsRoot = mustElement<HTMLElement>("#diagnostics");
+const exportControls = mustElement<HTMLElement>("#export-controls");
+const exportStatus = mustElement<HTMLElement>("#export-status");
+const exportOptions: Record<ExportFormat, { button: HTMLButtonElement; filename: string; label: string }> = {
+  html: { button: mustElement<HTMLButtonElement>("#export-html"), filename: "release-evidence-report.html", label: "HTML report" },
+  markdown: { button: mustElement<HTMLButtonElement>("#export-markdown"), filename: "release-evidence-report.md", label: "Markdown report" },
+  json: { button: mustElement<HTMLButtonElement>("#export-json"), filename: "release-evidence-packet.json", label: "JSON packet" },
+};
 
 let packet: Packet;
+let isLoaded = false;
 let isDirty = false;
 let isSaving = false;
+let isExporting = false;
 
 void load();
 
@@ -103,6 +113,10 @@ reviewForm.addEventListener("submit", (event) => {
   void save();
 });
 
+for (const format of ["html", "markdown", "json"] as const) {
+  exportOptions[format].button.addEventListener("click", () => { void download(format); });
+}
+
 window.addEventListener("beforeunload", (event) => {
   if (!isDirty) return;
   event.preventDefault();
@@ -110,17 +124,20 @@ window.addEventListener("beforeunload", (event) => {
 });
 
 async function load(): Promise<void> {
-  saveButton.disabled = true;
+  refreshActions();
   setStatus("Loading local evidence…", false, "loading");
   try {
     packet = await request<Packet>("/api/packet", { method: "GET" });
     render();
+    isLoaded = true;
     isDirty = false;
-    saveButton.disabled = true;
     setStatus(lastSavedMessage(packet, false), false, "clean");
+    setExportStatus("Ready to download the current packet.", false);
   } catch (error) {
     setStatus(errorMessage(error), true, "error");
-    saveButton.disabled = true;
+    setExportStatus("Downloads are unavailable because the packet could not be loaded.", true);
+  } finally {
+    refreshActions();
   }
 }
 
@@ -261,11 +278,12 @@ function createFinding(finding: Finding, existing?: AssessmentItem): HTMLElement
 }
 
 async function save(): Promise<void> {
-  if (!isDirty || isSaving) return;
+  if (!isLoaded || !isDirty || isSaving || isExporting) return;
   isSaving = true;
-  saveButton.disabled = true;
+  refreshActions();
   saveButton.textContent = "Saving…";
   setStatus("Saving changes to this local packet…", false, "saving");
+  setExportStatus("Downloads will be available after saving finishes.", false);
   try {
     const update: ReviewUpdate = {
       assessment: {
@@ -287,13 +305,68 @@ async function save(): Promise<void> {
     render();
     isDirty = false;
     setStatus(lastSavedMessage(packet, true), false, "saved");
+    setExportStatus("Ready to download the current packet.", false);
   } catch (error) {
     setStatus(errorMessage(error), true, "error");
+    setExportStatus("Save changes before downloading. Unsaved edits are excluded from exports.", false);
   } finally {
     isSaving = false;
     saveButton.textContent = "Save changes";
-    saveButton.disabled = !isDirty;
+    refreshActions();
   }
+}
+
+async function download(format: ExportFormat): Promise<void> {
+  if (!isLoaded || isDirty || isSaving || isExporting) return;
+  const option = exportOptions[format];
+  const restoreFocus = document.activeElement === option.button;
+  isExporting = true;
+  refreshActions();
+  setExportStatus(`Preparing ${option.label}…`, false);
+  try {
+    const response = await requestResponse("/api/export", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ format }),
+    });
+    const url = URL.createObjectURL(await response.blob());
+    try {
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = option.filename;
+      link.hidden = true;
+      document.body.append(link);
+      link.click();
+      link.remove();
+    } finally {
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+    setExportStatus(`${option.label} download started. Check your browser's downloads.`, false);
+  } catch (error) {
+    setExportStatus(`Download failed. ${errorMessage(error)}`, true);
+  } finally {
+    isExporting = false;
+    refreshActions();
+    if (restoreFocus && document.activeElement === document.body) option.button.focus({ preventScroll: true });
+  }
+}
+
+function refreshActions(): void {
+  const busy = isSaving || isExporting;
+  saveButton.disabled = !isLoaded || !isDirty || busy;
+  reviewForm.setAttribute("aria-busy", String(busy));
+  for (const control of reviewForm.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("input, select, textarea")) {
+    control.disabled = !isLoaded || busy;
+  }
+  exportControls.setAttribute("aria-busy", String(isExporting));
+  for (const option of Object.values(exportOptions)) {
+    option.button.disabled = !isLoaded || isDirty || busy;
+  }
+}
+
+function setExportStatus(message: string, isError: boolean): void {
+  exportStatus.textContent = message;
+  exportStatus.dataset.error = String(isError);
 }
 
 function collectAssessmentItems(): AssessmentItem[] {
@@ -317,6 +390,10 @@ function collectAssessmentItems(): AssessmentItem[] {
 }
 
 async function request<T>(url: string, init: RequestInit): Promise<T> {
+  return (await (await requestResponse(url, init)).json()) as T;
+}
+
+async function requestResponse(url: string, init: RequestInit): Promise<Response> {
   const headers = new Headers(init.headers);
   headers.set("X-Release-Evidence-Token", token);
   const response = await fetch(url, { ...init, headers, credentials: "same-origin" });
@@ -324,7 +401,7 @@ async function request<T>(url: string, init: RequestInit): Promise<T> {
     const body = (await response.json().catch(() => ({ error: `Request failed (${response.status}).` }))) as { error?: string };
     throw new Error(body.error ?? `Request failed (${response.status}).`);
   }
-  return (await response.json()) as T;
+  return response;
 }
 
 function selectControl(
@@ -413,10 +490,11 @@ function findingResult(finding: Finding): string {
 }
 
 function markDirty(): void {
-  if (isSaving) return;
+  if (!isLoaded || isSaving || isExporting) return;
   isDirty = true;
-  saveButton.disabled = false;
+  refreshActions();
   setStatus("Unsaved changes in this packet.", false, "dirty");
+  setExportStatus("Save changes before downloading. Unsaved edits are excluded from exports.", false);
 }
 
 function lastSavedMessage(current: Packet, justSaved: boolean): string {

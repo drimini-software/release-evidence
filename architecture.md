@@ -1,6 +1,6 @@
 # Release Evidence architecture
 
-Status: Implemented scanner, local review, and command-line export/comparison
+Status: Implemented scanner, local review/downloads, and command-line export/comparison
 Last reviewed: 2026-10-11
 
 ## Architectural goal
@@ -200,6 +200,14 @@ Serves embedded UI assets and a narrow JSON API. It must:
 The loopback server is still a security boundary. Binding locally does not make
 request validation optional.
 
+`POST /api/export` requires the exact session origin and capability token,
+accepts only `application/json`, and limits its strict format-only request to
+1 KiB. It takes one immutable session snapshot and renders HTML, Markdown, or
+JSON completely in memory before sending attachment headers. Every format
+validates the packet and evidence digest. Attachment filenames are fixed;
+repository and reviewer strings cannot enter headers or server-side paths.
+This endpoint neither rescans the repository nor writes review state.
+
 ### 7. Interface
 
 The interface receives normalized facts and assessment data, never arbitrary
@@ -212,8 +220,14 @@ Primary views:
 - finding explanation, citations, and limitations;
 - unanswered human questions;
 - owners and residual actions;
-- changes from a prior packet;
-- export preview.
+- current packet downloads as HTML, Markdown, and JSON.
+
+Prior-packet comparison remains a command-line workflow. The review page is
+the current packet preview, with a disclosure reminder beside its download
+controls. Unsaved edits block downloading; failed saves retain those edits and
+keep downloads blocked. Inputs pause during saving and exporting so a user
+cannot accidentally make an edit that is discarded by an in-flight save or
+excluded from a download. Failures remain visible and controls allow retry.
 
 Color is secondary to text and icon labels. Every interaction works by keyboard
 and exposes an accessible name, state, and error.
@@ -237,8 +251,8 @@ run in the value; line breaks become visible markers to prevent new blocks.
 Both formats retain scan and assessment timestamps without adding an export
 timestamp, so the same saved inputs produce the same report.
 
-All packet and report writes use the shared `internal/output` helper. It renders
-to a private temporary file, flushes and closes it, preserves the previous
+All server-side packet and report file writes use the shared `internal/output`
+helper. It renders to a private temporary file, flushes and closes it, preserves the previous
 output while replacing it, and rejects non-regular output paths. Report commands
 also reject input/output aliases, including hard links. Free-text notes are
 preserved; the exporter does not redact information a person chose to enter.

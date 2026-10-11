@@ -109,7 +109,7 @@ h1 em { color: var(--coral-text); font-style: normal; }
 
 .diagnostic-list { margin-bottom: 0; }
 
-.review-context, .decision { display: grid; grid-template-columns: minmax(0, .75fr) minmax(0, 1.25fr); gap: clamp(2rem, 6vw, 6rem); padding: 4rem 0; border-top: 1px solid var(--line); }
+.review-context, .decision, .exports { display: grid; grid-template-columns: minmax(0, .75fr) minmax(0, 1.25fr); gap: clamp(2rem, 6vw, 6rem); padding: 4rem 0; border-top: 1px solid var(--line); }
 #context-title, #findings-title, #decision-title { scroll-margin-top: 7rem; }
 
 .save-dock { position: sticky; top: .75rem; z-index: 8; display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 2rem; padding: .8rem 1rem; border: 1px solid var(--line); background: rgb(255 250 243 / 96%); box-shadow: .25rem .25rem 0 rgb(59 23 72 / 18%); }
@@ -186,10 +186,14 @@ button { border: 0; border-radius: .2rem; padding: .9rem 1.25rem; background: va
 
 button:disabled { cursor: default; opacity: .55; box-shadow: none; }
 
-#save-status { margin: 0; color: var(--muted); }
-#save-status[data-error="true"] { color: var(--not-observed); font-weight: 700; }
+#save-status, #export-status { margin: 0; color: var(--muted); }
+#save-status[data-error="true"], #export-status[data-error="true"] { color: var(--not-observed); font-weight: 700; }
 #save-status[data-state="dirty"] { color: var(--coral-text); font-weight: 750; }
 #save-status[data-state="saved"] { color: var(--observed); font-weight: 750; }
+
+.exports p { line-height: 1.5; }
+.exports__buttons { display: flex; flex-wrap: wrap; gap: 1rem; margin-block: 1.5rem; }
+.exports__hint { color: var(--muted); font-size: .85rem; }
 
 .footer { padding: 2rem 0 4rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .85rem; }
 
@@ -201,7 +205,7 @@ button:disabled { cursor: default; opacity: .55; box-shadow: none; }
   .summary-card { border-bottom: 1px solid var(--line); }
   .summary-card:nth-child(2n) { border-right: 0; }
   .summary-card:last-child { grid-column: 1 / -1; border-bottom: 0; }
-  .review-context, .decision { grid-template-columns: 1fr; }
+  .review-context, .decision, .exports { grid-template-columns: 1fr; }
   .context-fields, .decision__fields, .assessment-controls { grid-template-columns: 1fr; }
   .control--wide { grid-column: auto; }
   .finding__header { align-items: start; flex-direction: column; }

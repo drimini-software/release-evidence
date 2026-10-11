@@ -36,6 +36,12 @@ go run ./cmd/release-evidence review /path/to/repository
 saved atomically outside the scanned repository by default. Pass
 `--state /path/to/packet.json` when you want an explicit location.
 
+Use **Keep a copy** on the review page to download HTML, Markdown, or the
+complete JSON packet. Save any edits first; downloads include the current
+session's observations and recorded judgments without another scan. Editing
+pauses while saving or preparing a download. Downloading does not save review
+state, and the browser chooses the destination.
+
 ## Portable reports and comparisons
 
 Export a saved scan or review packet without access to its repository:
