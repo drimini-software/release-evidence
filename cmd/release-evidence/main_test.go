@@ -138,6 +138,41 @@ func TestReportCommandsRejectInvalidOptions(t *testing.T) {
 	}
 }
 
+func TestReportCommandsPreserveOutputOnAmbiguousPacket(t *testing.T) {
+	validPath := scanPacket(t)
+	valid, err := os.ReadFile(validPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ambiguous := bytes.Replace(valid, []byte(`"status": "not_made"`), []byte(`"status": "approved", "status": "not_made"`), 1)
+	if bytes.Equal(valid, ambiguous) {
+		t.Fatal("test did not add a duplicate decision field")
+	}
+	invalidPath := filepath.Join(t.TempDir(), "ambiguous.json")
+	if err := os.WriteFile(invalidPath, ambiguous, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"export", invalidPath},
+		{"compare", invalidPath, validPath},
+		{"compare", validPath, invalidPath},
+	} {
+		destination := filepath.Join(t.TempDir(), "report.html")
+		if err := os.WriteFile(destination, []byte("previous report"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		command := append([]string{args[0], "--output", destination}, args[1:]...)
+		var stdout, stderr bytes.Buffer
+		if code := run(context.Background(), command, &stdout, &stderr); code != 1 || stdout.Len() != 0 {
+			t.Fatalf("ambiguous packet command did not fail safely: %v, exit %d", command, code)
+		}
+		after, err := os.ReadFile(destination)
+		if err != nil || string(after) != "previous report" {
+			t.Fatal("ambiguous packet replaced the previous report")
+		}
+	}
+}
+
 func TestRunRejectsUnknownCommand(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer

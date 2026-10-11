@@ -65,6 +65,9 @@ func Decode(reader io.Reader) (model.Packet, error) {
 	if len(content) > 4<<20 {
 		return model.Packet{}, fmt.Errorf("packet exceeds the 4 MiB read limit")
 	}
+	if err := validateJSONMembers(content); err != nil {
+		return model.Packet{}, fmt.Errorf("decode packet: %w", err)
+	}
 
 	decoder := json.NewDecoder(bytes.NewReader(content))
 	decoder.DisallowUnknownFields()

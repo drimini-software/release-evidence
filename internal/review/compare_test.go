@@ -145,9 +145,16 @@ func TestComparisonRejectsInvalidEarlierPacketsWithoutDisclosure(t *testing.T) {
 		{"filesystem path", []byte(`{"path":"private-note-do-not-disclose"}`), http.StatusBadRequest},
 		{"trailing JSON", append(append([]byte{}, valid...), []byte("{}")...), http.StatusBadRequest},
 		{"unknown fields", bytes.Replace(valid, []byte("{\n"), []byte("{\n\"private-note-do-not-disclose\":true,"), 1), http.StatusBadRequest},
+		{"duplicate decision", bytes.Replace(valid, []byte(`"status": "not_made"`), []byte(`"status": "approved", "status": "not_made"`), 1), http.StatusBadRequest},
+		{"case alias", bytes.Replace(valid, []byte(`"status": "not_made"`), []byte(`"STATUS": "not_made"`), 1), http.StatusBadRequest},
+		{"invalid UTF-8", bytes.Replace(valid, []byte(`"status": "not_made"`), []byte("\"status\": \"not_made\", \"rationale\": \"\xffprivate-note-do-not-disclose\""), 1), http.StatusBadRequest},
+		{"invalid Unicode escape", bytes.Replace(valid, []byte(`"status": "not_made"`), []byte(`"status": "not_made", "rationale": "\ud800private-note-do-not-disclose"`), 1), http.StatusBadRequest},
 		{"oversized packet", []byte(strings.Repeat(" ", maxComparisonPacketBytes+1)), http.StatusRequestEntityTooLarge},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			if bytes.Equal(test.body, valid) {
+				t.Fatal("test did not mutate the earlier packet")
+			}
 			response := httptest.NewRecorder()
 			session.ServeHTTP(response, comparisonRequest(test.body, "format=html"))
 			if response.Code != test.status || response.Header().Get("Content-Disposition") != "" {

@@ -272,6 +272,16 @@ preserved; the exporter does not redact information a person chose to enter.
 Opening the local export for review before sharing is the current disclosure
 workflow; no external transfer or automatic publication occurs.
 
+Saved-packet imports share a bounded JSON preflight before typed decoding,
+schema validation, and evidence-digest verification. It requires unique object
+members with the schema's lowercase ASCII names, including inside arrays;
+escaped names are compared after decoding. It rejects invalid UTF-8 bytes,
+unpaired UTF-16 surrogate escapes, and nesting beyond 32 levels. This avoids
+legacy JSON decoding silently overwriting fields, accepting case aliases, or
+repairing damaged text. Valid Unicode and ordinary escaped text remain intact.
+The preflight uses the standard JSON tokenizer, adds no dependencies, and keeps
+the 4 MiB input limit. It does not make unsigned human judgments authoritative.
+
 ## Evidence state semantics
 
 ### Observed
@@ -450,6 +460,15 @@ Golden outputs should be reviewed like product copy because they encode the
 meaning of each rule.
 
 ### Fuzz and property tests
+
+`internal/packet` has two native Go fuzz targets. `FuzzDecodePacket` mutates
+untrusted input bytes; rejected inputs return no partial packet, while accepted
+inputs must round-trip without data changes and work with both report formats.
+`FuzzPacketText` keeps the schema and evidence digest valid while mutating
+repository and human text, checking complete round trips, unchanged comparison
+semantics, deterministic reports, and the absence of active HTML elements.
+CI runs each for 20 seconds with two workers and retains failing corpus inputs
+for seven days. Seed cases run in the normal Go test suite.
 
 Prioritize path handling, structured-data parsers, normalization, and exporter
 escaping. Useful invariants include:

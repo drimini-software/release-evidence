@@ -28,6 +28,22 @@ jobs:
       - name: Run Go vet
         run: go vet ./...
 
+      - name: Fuzz packet imports
+        run: go test ./internal/packet -run '^$' -fuzz '^FuzzDecodePacket$' -fuzztime 20s -parallel 2
+
+      - name: Fuzz packet text round trips and reports
+        run: go test ./internal/packet -run '^$' -fuzz '^FuzzPacketText$' -fuzztime 20s -parallel 2
+
+      - name: Retain failing fuzz inputs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: packet-fuzz-failures-${{ github.run_id }}-${{ github.run_attempt }}
+          path: internal/packet/testdata/fuzz/
+          if-no-files-found: ignore
+          archive: true
+          retention-days: 7
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:

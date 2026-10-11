@@ -96,6 +96,14 @@ cannot replace either input packet, and links or directories are rejected as
 output targets. Use `.cache/` for local reports to keep them out of this source
 repository. Reports remain experimental evidence records, not release approval.
 
+Imported packets must use the schema's exact lowercase field names and unique
+members in every JSON object. Duplicate fields (including escaped spellings),
+case aliases, invalid UTF-8 bytes, unpaired Unicode surrogate escapes, and
+nesting beyond 32 levels are rejected before schema and evidence-digest checks.
+The existing 4 MiB input limit applies to CLI and review-page imports. Ordinary
+Unicode text and valid escaped field names are preserved. These checks remove
+ambiguous representations; they do not authenticate recorded human decisions.
+
 ## What the results mean
 
 Each detector produces one of these machine-observation states:
@@ -136,6 +144,10 @@ compatibility.
 go test ./...
 go vet ./...
 
+# Optional bounded fuzz runs; CI runs both targets for 20 seconds each.
+go test ./internal/packet -run '^$' -fuzz '^FuzzDecodePacket$' -fuzztime 20s -parallel 2
+go test ./internal/packet -run '^$' -fuzz '^FuzzPacketText$' -fuzztime 20s -parallel 2
+
 cd ui
 pnpm install --frozen-lockfile
 pnpm build
@@ -146,6 +158,15 @@ pnpm test:e2e
 The TypeScript build writes the interface bundle embedded by the Go executable.
 Synthetic scanner inputs live in `fixtures/`, and the packet contract is in
 `schema/packet.schema.json`.
+
+Ordinary `go test ./...` also runs the fuzz seed cases. The two bounded CI runs
+exercise damaged packet imports and valid hostile text through encoding,
+comparison, and report rendering. On a discovered failure, Go writes a minimal
+reproducer under `internal/packet/testdata/fuzz/`; CI retains that directory in
+a run-specific artifact for seven days. Reproduce it locally, fix the fault,
+and retain the input as a regression test. Fuzzing is sampled coverage, not a
+proof that all hostile inputs are safe. See Go's
+[fuzzing documentation](https://go.dev/doc/security/fuzz/).
 
 Contributions are welcome within the project's narrow safety boundary. Read
 [CONTRIBUTING.md](CONTRIBUTING.md) before proposing substantial functionality.
